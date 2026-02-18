@@ -1,12 +1,18 @@
 from flask import Flask, send_file, jsonify, abort, request
 from flask_cors import CORS
-from config import Config
-from utils import get_room_image, check_ffmpeg
 import subprocess
 import time
+import os
+import sys
+
+# Добавляем путь к текущей директории в sys.path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from config import Config
+from utils import get_room_image, check_ffmpeg
 
 app = Flask(__name__)
-CORS(app)  # Разрешить CORS для всех маршрутов
+CORS(app)
 cameras = Config.load_cameras()
 
 @app.route('/snapshot/<room>', methods=['GET'])
@@ -30,12 +36,16 @@ def room_info(room):
         abort(404, description="Room not found")
     
     camera = cameras[room_code]
+    # Скрываем пароль в URL
+    url_parts = camera['url'].split('@')
+    hidden_url = f"rtsp://***:***@{url_parts[1]}" if len(url_parts) > 1 else camera['url']
+    
     return jsonify({
         'code': room_code,
         'name': camera['name'],
         'ip': camera['ip'],
         'stream': camera['stream'],
-        'url': camera['url'].replace(Config.RTSP_AUTH, '***:***')  # Скрываем пароль
+        'url': hidden_url
     })
 
 @app.route('/health', methods=['GET'])

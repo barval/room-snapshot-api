@@ -9,6 +9,13 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Копируем все файлы проекта
 COPY . .
+
+# Создаем необходимые директории
+RUN mkdir -p /app/config
+
+# Устанавливаем Python путь
+ENV PYTHONPATH="${PYTHONPATH}:/app"
 
 CMD ["python", "app/app.py"]
