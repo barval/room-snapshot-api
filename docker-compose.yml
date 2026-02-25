@@ -1,0 +1,10 @@
+services:
+  snapshots-api:
+    build: .
+    ports:
+      - "5005:5000"
+    volumes:
+      - ./config:/app/config
+    env_file:
+      - .env
+    restart: unless-stopped
