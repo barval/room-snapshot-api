@@ -41,8 +41,8 @@ API для получения снимков с камер видеонаблю�
 
 ### 1. Клонирование репозитория
 ```bash
-git clone <your-repo-url>
-cd <project-directory>
+git clone https://gitea.prits.ru/barval-my/room-snapshot-api.git
+cd room-snapshot-api
 ```
 
 ### 2. Настройка конфигурации
