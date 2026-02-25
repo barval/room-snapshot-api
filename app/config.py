@@ -6,8 +6,12 @@ load_dotenv()
 
 class Config:
     RTSP_AUTH = os.getenv('RTSP_AUTH', '')
-    API_VERSION = '1.1.0'
+    API_VERSION = '1.2.0'
     API_TITLE = 'Room Snapshot API'
+        DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    HOST = os.getenv('HOST', '0.0.0.0')
+    PORT = int(os.getenv('PORT', 5000))
+    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
     
     @staticmethod
     def load_cameras():

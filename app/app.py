@@ -12,6 +12,7 @@ from config import Config
 from utils import get_room_image, check_ffmpeg
 
 app = Flask(__name__)
+app.config.from_object(Config)
 CORS(app)
 cameras = Config.load_cameras()
 
@@ -109,4 +110,4 @@ def bad_request(error):
     return jsonify({'error': 'Bad request', 'message': str(error)}), 400
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG)

@@ -1,5 +1,5 @@
 services:
-  snapshots-api:
+  api:
     build: .
     ports:
       - "5005:5000"
@@ -7,4 +7,19 @@ services:
       - ./config:/app/config
     env_file:
       - .env
+    environment:
+      - FLASK_DEBUG=false
+      - SECRET_KEY=${SECRET_KEY:-please-set-secret-key}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        

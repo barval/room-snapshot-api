@@ -1,4 +1,4 @@
-# Room Snapshot API v1.1
+# Room Snapshot API v1.2
 
 API for retrieving snapshots from surveillance cameras in various rooms. The service provides current images from RTSP cameras through a simple REST API.
 
@@ -55,9 +55,11 @@ Create a .env file based on the example:
 cp .env.example .env
 ```
 
-Edit .env and set the camera credentials:
+Edit .env and provide the camera login/password and other parameters:
 ```env
 RTSP_AUTH="username:password"
+FLASK_DEBUG=false
+SECRET_KEY="Your-secret-key-here"
 ```
 
 ### 3. Configure cameras
@@ -90,6 +92,10 @@ The service will be available at: `http://localhost:5005`
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `RTSP_AUTH` | Username and password for camera access | `admin:password123` |
+| `FLASK_DEBUG` | Enable Flask debug mode (false in production) | `false` |
+| `SECRET_KEY` | Secret key for Flask sessions (set a strong value) | `generated string` |
+| `HOST` | Bind address (default 0.0.0.0) | `0.0.0.0` |
+| `PORT` | Port (default 5000) | `5000` |
 
 ### `cameras.conf` file
 Line format: `code=ip:port:name`
@@ -114,7 +120,7 @@ GET /info
 ```json
 {
     "name": "Room Snapshot API",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "API for retrieving snapshots from surveillance cameras",
     "endpoints": {
         "rooms": {
@@ -285,6 +291,11 @@ docker-compose logs -f
 # View last 100 lines
 docker-compose logs --tail=100
 ```
+### Docker health check
+The container includes a health check that verifies the status every 30 seconds. You can check the health status with:
+```bash
+docker inspect --format='{{json .State.Health}}' room-snapshot-api-api-1
+```
 
 ## 🐳 Docker
 
@@ -312,6 +323,14 @@ docker-compose restart
 ```bash
 docker-compose ps
 ```
+
+## 🚀 Production Deployment
+For production use, the application is run with Gunicorn (as specified in the Dockerfile). Key production considerations:
+- Set `FLASK_DEBUG=false` and provide a strong `SECRET_KEY` in the `.env` file.
+- The Docker container includes a health check for orchestration tools.
+- Logging is configured to output JSON-formatted logs to stdout, suitable for collection by Docker logging drivers.
+- Security headers are added via Flask-Talisman (CSP is disabled by default; configure as needed).
+- For further hardening, place the API behind a reverse proxy (e.g., nginx) that handles SSL termination and rate limiting.
 
 ## 🔍 Troubleshooting
 
@@ -354,6 +373,7 @@ sudo apt-get update && sudo apt-get install ffmpeg
 - Credentials are stored in `.env` and not committed to the repository
 - Currently, a single username/password is used for all cameras
 - Passwords are masked in API responses
+- Security headers (HSTS, X-Frame-Options, etc.) are enabled via Flask-Talisman
 - It is recommended to use network policies to restrict API access
 - For production, use HTTPS and request authentication
 
