@@ -1,6 +1,15 @@
-# Room Snapshot API v1.2
+<div align="center">
+ 
+  # Room Snapshot API v1.2
+  
+  **API for retrieving snapshots from surveillance cameras in various rooms. The service provides current images from RTSP cameras through a simple REST API.**
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+  [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+  [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 
-API for retrieving snapshots from surveillance cameras in various rooms. The service provides current images from RTSP cameras through a simple REST API.
+[English](README.md) | [Русский](README-ru.md)
+</div>
 
 ## 📋 Table of Contents
 - [Features](#features)
