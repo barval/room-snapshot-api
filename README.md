@@ -189,7 +189,7 @@ GET /rooms/{room_code}
 **Parameters:**
 - `room_code` - room code (e.g., `liv`)
 
-**ОтвResponseет:**
+**Response:**
 ```json
 {
     "code": "liv",
