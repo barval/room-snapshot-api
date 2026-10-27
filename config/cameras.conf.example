@@ -1,0 +1,10 @@
+# Room Snapshot API — camera list template.
+# Copy to cameras.conf and edit. The real file is not tracked by git.
+# Format: code=ip:port/path:name
+#   code   - unique room id (latin, lowercase)
+#   ip     - camera IP address
+#   port   - RTSP port (usually 554)
+#   path   - RTSP stream path (vendor specific)
+#   name   - default display name (used as fallback; see rooms.i18n.json)
+kuh=192.168.1.105:554/stream1:Kitchen
+gos=192.168.1.102:554/stream1:Living room
