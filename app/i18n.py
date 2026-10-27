@@ -56,7 +56,9 @@ def resolve_lang(
     return default
 
 
-def room_name(code: str, lang: str, cameras: dict[str, Camera], i18n: dict[str, dict[str, str]]) -> str:
+def room_name(
+    code: str, lang: str, cameras: dict[str, Camera], i18n: dict[str, dict[str, str]]
+) -> str:
     """Return the room label in ``lang``, falling back to the camera's default name."""
     translations = i18n.get(code, {})
     if lang in translations:
@@ -65,7 +67,9 @@ def room_name(code: str, lang: str, cameras: dict[str, Camera], i18n: dict[str, 
     return camera.name if camera else code
 
 
-def room_names(code: str, cameras: dict[str, Camera], i18n: dict[str, dict[str, str]]) -> dict[str, str]:
+def room_names(
+    code: str, cameras: dict[str, Camera], i18n: dict[str, dict[str, str]]
+) -> dict[str, str]:
     """Return every known label for a room, including the default fallback."""
     camera = cameras.get(code)
     names = {"default": camera.name if camera else code}

@@ -77,7 +77,9 @@ class Config:
     PORT = int(os.getenv("PORT", "5000"))
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
     DEFAULT_LANG = os.getenv("DEFAULT_LANG", "en")
-    CORS_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()]
+    CORS_ORIGINS = [
+        origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()
+    ]
     SNAPSHOT_CACHE_TTL = float(os.getenv("SNAPSHOT_CACHE_TTL", "5"))
     SNAPSHOT_TIMEOUT = int(os.getenv("SNAPSHOT_TIMEOUT", "15"))
     MCP_PORT = int(os.getenv("MCP_PORT", "8000"))
@@ -110,7 +112,9 @@ class Config:
         return credentials
 
     @staticmethod
-    def load_cameras(cameras_path: str | None = None, auth_path: str | None = None) -> dict[str, Camera]:
+    def load_cameras(
+        cameras_path: str | None = None, auth_path: str | None = None
+    ) -> dict[str, Camera]:
         """Load cameras from ``cameras.conf`` (``code=ip:port/path:name``)."""
         conf_path = cameras_path or resolve_config_path("CAMERAS_CONF", "cameras.conf")
         cameras: dict[str, Camera] = {}

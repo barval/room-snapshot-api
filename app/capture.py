@@ -57,7 +57,7 @@ def capture_snapshot(url: str, timeout: int = 15, width: int | None = None) -> b
     command.append(path)
 
     try:
-        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+        subprocess.run(command, check=True, capture_output=True, timeout=timeout)
         with open(path, "rb") as handle:
             data = handle.read()
         if data:

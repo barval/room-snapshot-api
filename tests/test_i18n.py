@@ -60,7 +60,11 @@ def test_room_name_falls_back_to_camera_name():
 
 
 def test_room_names_includes_default_and_translations():
-    assert room_names("kuh", CAMERAS, I18N) == {"default": "Kitchen", "ru": "Кухня", "en": "Kitchen"}
+    assert room_names("kuh", CAMERAS, I18N) == {
+        "default": "Kitchen",
+        "ru": "Кухня",
+        "en": "Kitchen",
+    }
 
 
 def test_room_names_default_only_without_translations():
