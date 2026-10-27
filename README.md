@@ -1,408 +1,201 @@
-<div align="center">
- 
-  # Room Snapshot API v1.2
-  
-  **API for retrieving snapshots from surveillance cameras in various rooms. The service provides current images from RTSP cameras through a simple REST API.**
-  
-  [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-  [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-  [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+# Room Snapshot API v1.3
 
-[English](README.md) | [Русский](README-ru.md)
-</div>
+**English** | [Русский](README-ru.md)
 
-## 📋 Table of Contents
-- [Features](#features)
-- [Requirements](#requirements)
-- [Quick Start](#quick-start)
-- [Configuration](#configuration)
-- [API Endpoints](#api-endpoints)
-- [Usage Examples](#usage-examples)
-- [Monitoring and Diagnostics](#monitoring-and-diagnostics)
-- [Docker](#docker)
-- [Troubleshooting](#troubleshooting)
-- [Notes](#notes)
-- [Security](#security)
-- [Roadmap](#roadmap)
-- [License](#license)
-- [Support](#support)
+[![Python 3.15](https://img.shields.io/badge/python-3.15-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-ready-%230db7ed.svg)](https://www.docker.com/)
 
-## 🚀 Features
+A small service that turns RTSP surveillance cameras into a simple HTTP API and an
+MCP server. Other projects — scripts, sites, apps and AI agents — talk to it instead
+of dealing with RTSP URLs and camera credentials.
 
-- 📸 Retrieve snapshots from RTSP cameras
-- 🏠 Support for multiple rooms/cameras
-- 🔒 Secure storage of credentials
-- 🐳 Ready-to-use Docker build
-- 📊 Monitoring endpoints
-- 🔍 Detailed camera information
-- ⚡ Caching and optimization
-- 🌐 CORS support for web applications
+## Features
 
-## 📋 Requirements
+- **HTTP API** for room lists, room details and JPEG snapshots.
+- **MCP server** (streamable HTTP) so AI agents get cameras as ready-made tools.
+- **Per-camera credentials** instead of one shared login.
+- **API key authentication** on every endpoint (REST and MCP).
+- **Concurrent capture**: requests to different cameras run in parallel.
+- **In-memory snapshot cache** with `ETag`/`304` and `Cache-Control`.
+- **Localized room names** (`ru`/`en`) with a per-installation translation file.
+- **Real health check**: live TCP probes of every camera.
+- Docker image, runs as a non-root user.
 
-- Docker and Docker Compose (recommended)
-- Python 3.9+ (for local run)
-- Access to RTSP cameras
-- FFmpeg (included in Docker image)
+## Requirements
 
-## ✅ Testing
+- Docker and Docker Compose (recommended), or
+- Python 3.15 and FFmpeg for local development.
+- Network access to the RTSP cameras.
 
-- The application has been tested with cameras: TP-LINK TAPO C100, C200, C500.
+## Quick start
 
-## 🏁 Quick Start
-
-### 1. Clone the repository
 ```bash
-git clone https://github.com/barval/room-snapshot-api.git
+git clone git@gitea.prits.ru:barval-my/room-snapshot-api.git
 cd room-snapshot-api
+
+cp .env.example .env               # set API_KEY and RTSP_AUTH
+cp config/cameras.conf.example config/cameras.conf
+cp config/cameras.auth.example config/cameras.auth     # optional per-camera credentials
+cp config/rooms.i18n.example.json config/rooms.i18n.json  # optional translations
+
+docker compose up -d
 ```
 
-### 2. Configure environment
+The REST API is available at `http://localhost:5005` and the MCP server at
+`http://localhost:5006/mcp`.
 
-Create a .env file based on the example:
+## Installation-specific files
+
+The set of cameras, their names and credentials differ per installation and are
+**never committed**. Only the `*.example` templates are tracked; the real files live
+in `config/` and are excluded from the Docker image (mounted as a volume).
+
+| File | Purpose | Format |
+|------|---------|--------|
+| `config/cameras.conf` | Camera list | `code=ip:port/path:name` |
+| `config/cameras.auth` | Per-camera credentials (optional) | `code=user:password` |
+| `config/rooms.i18n.json` | Localized room names (optional) | `{"kuh": {"ru": "Кухня", "en": "Kitchen"}}` |
+
+- A camera without a record in `cameras.auth` falls back to the global `RTSP_AUTH`.
+- A camera without any credentials gets a URL without userinfo.
+- A missing `rooms.i18n.json` means names from `cameras.conf` are used as-is.
+
+## Configuration (`.env`)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `API_KEY` | Shared API key for REST and MCP. Required. | — |
+| `RTSP_AUTH` | Fallback camera credentials `user:password`. | `` |
+| `CORS_ORIGINS` | Comma-separated allowed origins; empty blocks cross-origin. | `` |
+| `DEFAULT_LANG` | Default room-name language (`en` or `ru`). | `en` |
+| `SNAPSHOT_CACHE_TTL` | Snapshot cache lifetime, seconds. | `5` |
+| `SNAPSHOT_TIMEOUT` | ffmpeg capture timeout, seconds. | `15` |
+| `MCP_PORT` | MCP server port. | `8000` |
+| `FLASK_DEBUG` | Debug mode (never in production). | `false` |
+| `SECRET_KEY` | Flask session secret. | — |
+| `HOST`, `PORT` | Bind address/port (development server). | `0.0.0.0`, `5000` |
+| `CONFIG_DIR` | Directory with the installation files. | `/app/config` |
+| `CAMERAS_CONF` | Override path to `cameras.conf`. | `<CONFIG_DIR>/cameras.conf` |
+| `CAMERAS_AUTH` | Override path to `cameras.auth`. | `<CONFIG_DIR>/cameras.auth` |
+| `ROOMS_I18N` | Override path to `rooms.i18n.json`. | `<CONFIG_DIR>/rooms.i18n.json` |
+
+The service **fails closed**: if `API_KEY` is empty and `FLASK_DEBUG` is not `true`,
+it refuses to start.
+
+Run the development server with `python -m app.app` (uses `HOST`/`PORT`); under Docker
+the port is fixed by the gunicorn command.
+
+## Authentication
+
+Every request needs the shared key, either as an `X-API-Key` header or as
+`Authorization: Bearer <key>`:
+
 ```bash
-cp .env.example .env
+curl -H "X-API-Key: $API_KEY" http://localhost:5005/rooms
 ```
 
-Edit .env and provide the camera login/password and other parameters:
-```env
-RTSP_AUTH="username:password"
-FLASK_DEBUG=false
-SECRET_KEY="Your-secret-key-here"
-```
+A missing or wrong key returns `401 {"error": "Unauthorized"}`.
 
-### 3. Configure cameras
+## REST endpoints
 
-Create a config/cameras.conf file with the list of cameras:
-```conf
-# Format: code=ip:port:name
-bed=192.168.1.101:554:Bedroom
-liv=192.168.1.102:554:Living Room
-stu=192.168.1.103:554:Study
-hal=192.168.1.104:554:Hallway
-kit=192.168.1.105:554:Kitchen
-chi=192.168.1.106:554:Children's Room
-ves=192.168.1.107:554:Vestibule
-cor=192.168.1.108:554:Corridor
-bal=192.168.1.109:554:Balcony
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/info` | API metadata and endpoint list. |
+| GET | `/rooms` | `{code: name}` for all rooms (language via `?lang=` / `Accept-Language`). |
+| GET | `/rooms/<code>` | Room details: `name`, `names`, `ip`, `stream`, masked `url`. |
+| GET | `/snapshot/<code>` | JPEG snapshot. Params: `width=<px>`, `fresh=1`, `lang=`. |
+| GET | `/health` | Live camera reachability; always HTTP 200. |
 
-### 4. Run with Docker
+Snapshot responses carry `ETag` and `Cache-Control`; send `If-None-Match` to get
+`304 Not Modified`. `?fresh=1` bypasses the cache and refreshes it.
 
 ```bash
-docker-compose up -d
+curl -H "X-API-Key: $API_KEY" http://localhost:5005/snapshot/kuh?width=640 -o kuh.jpg
 ```
 
-The service will be available at: `http://localhost:5005`
+## MCP server
 
-## 🔧 Configuration
+AI agents connect over **streamable HTTP** at `http://host:5006/mcp`, using the same
+`API_KEY` (`X-API-Key` header or `Authorization: Bearer`).
 
-### `.env` file
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `RTSP_AUTH` | Username and password for camera access | `admin:password123` |
-| `FLASK_DEBUG` | Enable Flask debug mode (false in production) | `false` |
-| `SECRET_KEY` | Secret key for Flask sessions (set a strong value) | `generated string` |
-| `HOST` | Bind address (default 0.0.0.0) | `0.0.0.0` |
-| `PORT` | Port (default 5000) | `5000` |
+Tools exposed:
 
-### `cameras.conf` file
-Line format: `code=ip:port:name`
-- `code` - unique room identifier (lowercase Latin)
-- `ip` - camera IP address
-- `port` - RTSP port (usually 554)
-- `name` - display name of the room
+| Tool | Arguments | Returns |
+|------|-----------|---------|
+| `list_rooms` | `lang?` | Room code → localized name. |
+| `get_snapshot` | `room`, `width?`, `lang?` | JPEG frame as image content. |
+| `room_info` | `room`, `lang?` | Room details with a masked URL. |
+| `health` | — | Camera reachability and ffmpeg availability. |
 
-## 📡 API Endpoints
+Example MCP client configuration (URL transport):
 
-### Base URL
-```
-http://your-server:5005
-```
-
-### 1. API Information
-```
-GET /info
-```
-
-**Response:**
 ```json
 {
-    "name": "Room Snapshot API",
-    "version": "1.2.0",
-    "description": "API for retrieving snapshots from surveillance cameras",
-    "endpoints": {
-        "rooms": {
-            "method": "GET",
-            "path": "/rooms",
-            "description": "List all rooms"
-        },
-        "room_info": {
-            "method": "GET",
-            "path": "/rooms/<room>",
-            "description": "Information about a specific room"
-        },
-        "snapshot": {
-            "method": "GET",
-            "path": "/snapshot/<room>",
-            "description": "Get a snapshot of the room"
-        },
-        "health": {
-            "method": "GET",
-            "path": "/health",
-            "description": "Health check"
-        },
-        "info": {
-            "method": "GET",
-            "path": "/info",
-            "description": "API information"
-        }
+  "mcpServers": {
+    "room-snapshot": {
+      "url": "http://localhost:5006/mcp",
+      "headers": { "X-API-Key": "your-api-key" }
     }
+  }
 }
 ```
 
-### 2. List Rooms
-```
-GET /rooms
-```
+## Localization
 
-**Response:**
-```json
-{
-    "bed": "Bedroom",
-    "liv": "Living Room",
-    "stu": "Study",
-    "hal": "Hallway",
-    "kit": "Kitchen",
-    "chi": "Children's Room",
-    "ves": "Vestibule",
-    "cor": "Corridor",
-    "bal": "Balcony"
-}
-```
+The room **code** (`kuh`) is a stable, language-neutral identifier used by URLs, ACLs
+and integrations. Only the **label** is translated. Language resolution order:
+`?lang=` → `Accept-Language` header → `DEFAULT_LANG`. `/rooms` keeps returning
+`{code: name}`; `/rooms/<code>` additionally includes `names` with every translation.
 
-### 3. Room Information
-```
-GET /rooms/{room_code}
-```
+Because the default is `en`, existing Russian-language clients (for example FLAI) must
+send `Accept-Language: ru` or `?lang=ru` to keep receiving Russian labels.
 
-**Parameters:**
-- `room_code` - room code (e.g., `liv`)
+## Monitoring
 
-**Response:**
-```json
-{
-    "code": "liv",
-    "name": "Living Room",
-    "ip": "192.168.1.102",
-    "stream": "554",
-    "url": "rtsp://***:***@192.168.1.102:554"
-}
-```
-
-### 4. Get Snapshot
-```
-GET /snapshot/{room_code}
-```
-
-**Parameters:**
-- `room_code` - room code (e.g., `liv`)
-
-**Example:**
 ```bash
-curl http://localhost:5005/snapshot/liv -o liv.jpg
+curl -H "X-API-Key: $API_KEY" http://localhost:5005/health | jq
 ```
 
-### 5. Health Check
-```
-GET /health
-```
+`status` is `healthy`, `degraded` (some cameras unreachable) or `unhealthy` (none).
+The HTTP code stays 200 so a switched-off camera does not restart the container.
+`docker compose logs -f` shows JSON logs.
 
-**Response:**
-```json
-{
-    "status": "healthy",
-    "timestamp": 1700000000.123,
-    "cameras_loaded": 9,
-    "ffmpeg_available": true,
-    "cameras": ["bed", "liv", "stu", "hal", "kit", "chi", "ves", "cor", "bal"]
-}
-```
+## Docker
 
-## 📝 Usage Examples
-
-### cURL
 ```bash
-# Get list of rooms
-curl http://localhost:5005/rooms
-
-# Get room information
-curl http://localhost:5005/rooms/liv
-
-# Save a snapshot
-curl http://localhost:5005/snapshot/liv -o liv.jpg
-
-# Check service health
-curl http://localhost:5005/health
+docker compose build
+docker compose up -d      # api on :5005, mcp on :5006
+docker compose down
 ```
 
-### Python
-```python
-import requests
+## Development
 
-BASE_URL = "http://localhost:5005"
-
-# Get list of rooms
-rooms = requests.get(f"{BASE_URL}/rooms").json()
-print(f"Available rooms: {rooms}")
-
-# Get a snapshot
-response = requests.get(f"{BASE_URL}/snapshot/liv")
-with open("liv.jpg", "wb") as f:
-    f.write(response.content)
-
-# Check service health
-health = requests.get(f"{BASE_URL}/health").json()
-print(f"Status: {health['status']}")
-print(f"Cameras loaded: {health['cameras_loaded']}")
-```
-
-### JavaScript
-```javascript
-// Get a snapshot
-fetch('http://localhost:5005/snapshot/liv')
-    .then(response => response.blob())
-    .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const img = document.createElement('img');
-        img.src = url;
-        document.body.appendChild(img);
-    });
-
-// Check status
-fetch('http://localhost:5005/health')
-    .then(response => response.json())
-    .then(data => console.log('Status:', data));
-```
-
-## 📊 Monitoring and Diagnostics
-
-### Check camera availability
 ```bash
-curl http://localhost:5005/health | jq '.cameras'
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements-dev.txt
+ruff check app tests
+pytest -q
 ```
 
-### Service logs
-```bash
-# View Docker container logs
-docker-compose logs -f
+CI runs `ruff` and `pytest` on every push (`.gitea/workflows/ci.yml`).
 
-# View last 100 lines
-docker-compose logs --tail=100
-```
-### Docker health check
-The container includes a health check that verifies the status every 30 seconds. You can check the health status with:
-```bash
-docker inspect --format='{{json .State.Health}}' room-snapshot-api-api-1
-```
+## Security notes
 
-## 🐳 Docker
+- Credentials live in `config/cameras.auth` and `.env`, never in git or the image.
+- Every endpoint requires the API key; the service will not start without one.
+- Requests to different cameras run in parallel; one slow stream does not block the rest.
+- Use HTTPS and a reverse proxy in production; camera credentials are URL-encoded and
+  masked in API responses and logs.
 
-### Build image
-```bash
-docker-compose build
-```
+## Roadmap
 
-### Start container
-```bash
-docker-compose up -d
-```
+- MJPEG / WebSocket live streams
+- ONVIF camera discovery
+- Web viewing UI
+- Archive recording
+- Prometheus metrics
 
-### Stop container
-```bash
-docker-compose down
-```
+## License
 
-### Restart
-```bash
-docker-compose restart
-```
-
-### Check status
-```bash
-docker-compose ps
-```
-
-## 🚀 Production Deployment
-For production use, the application is run with Gunicorn (as specified in the Dockerfile). Key production considerations:
-- Set `FLASK_DEBUG=false` and provide a strong `SECRET_KEY` in the `.env` file.
-- The Docker container includes a health check for orchestration tools.
-- Logging is configured to output JSON-formatted logs to stdout, suitable for collection by Docker logging drivers.
-- Security headers are added via Flask-Talisman (CSP is disabled by default; configure as needed).
-- For further hardening, place the API behind a reverse proxy (e.g., nginx) that handles SSL termination and rate limiting.
-
-## 🔍 Troubleshooting
-
-### Issue: Cannot get snapshot
-**Solution:**
-1. Check camera reachability: `ping CAMERA_IP`
-2. Check logs: `docker-compose logs`
-3. Verify credentials in `.env`
-4. Check `cameras.conf` format
-
-### Issue: Camera not listed
-**Solution:**
-1. Check `cameras.conf` syntax
-2. Restart container: `docker-compose restart`
-3. Check logs for parsing errors
-
-### Issue: Timeout when getting snapshot
-**Solution:**
-- Increase timeout in `utils.py` (`timeout parameter`)
-- Check network quality
-- Ensure RTSP port is open
-
-### Issue: FFmpeg not found
-**Solution:**
-```bash
-# FFmpeg is already installed in the Docker container
-# For local run:
-sudo apt-get update && sudo apt-get install ffmpeg
-```
-
-## 📝 Notes
-
-- All endpoints support CORS for web application integration
-- Snapshots are temporarily stored in `/tmp` and are removed on restart
-- For production, it is recommended to use a reverse proxy (nginx) and HTTPS
-- For high request rates, consider setting up caching
-
-## 🔒 Security
-
-- Credentials are stored in `.env` and not committed to the repository
-- Currently, a single username/password is used for all cameras
-- Passwords are masked in API responses
-- Security headers (HSTS, X-Frame-Options, etc.) are enabled via Flask-Talisman
-- It is recommended to use network policies to restrict API access
-- For production, use HTTPS and request authentication
-
-
-## 📈 Roadmap
-
-
-- [ ] Add individual credentials per camera
-- [ ] Add API key authentication
-- [ ] Implement snapshot caching
-- [ ] Add WebSocket for live streams
-- [ ] Create a web interface for viewing
-- [ ] Add ONVIF camera support
-- [ ] Implement archive recording
-
-## 📄 License
-
-MIT
-
-## 📞 Support
-
-If you encounter any issues, please create an issue in the project repository.
-```
+MIT — see [LICENSE](LICENSE). Russian translation: [LICENSE-ru](LICENSE-ru).

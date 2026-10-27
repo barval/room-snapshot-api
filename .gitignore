@@ -1,1 +1,15 @@
+# Environment
 .env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Installation-specific camera data (only *.example is tracked)
+config/cameras.conf
+config/cameras.auth
+config/rooms.i18n.json
+
+# Internal specs and plans (never committed)
+docs/superpowers/
