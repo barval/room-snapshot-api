@@ -115,3 +115,10 @@ def test_load_camera_auth_handles_odd_values(tmp_path, value):
         assert result == {"kuh": value}
     else:
         assert result == {}
+
+
+def test_load_cameras_skips_non_numeric_port(tmp_path, monkeypatch):
+    monkeypatch.setattr(Config, "RTSP_AUTH", "")
+    conf = _write(tmp_path / "cameras.conf", "kuh=10.0.0.5:stream1:Kitchen\n")
+    cameras = Config.load_cameras(conf, str(tmp_path / "missing.auth"))
+    assert cameras == {}

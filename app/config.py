@@ -144,6 +144,14 @@ class Config:
                     if not code or not ip or not stream:
                         logger.warning("cameras.conf line %d: missing required fields", line_num)
                         continue
+                    port, _, _path = stream.partition("/")
+                    if not port.isdigit():
+                        logger.warning(
+                            "cameras.conf line %d: stream %r does not start with a numeric port",
+                            line_num,
+                            stream,
+                        )
+                        continue
                     auth = auth_map.get(code) or global_auth
                     username, sep, password = auth.partition(":") if auth else ("", "", "")
                     cameras[code] = Camera(

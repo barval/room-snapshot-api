@@ -141,6 +141,10 @@ curl -H "X-API-Key: $API_KEY" http://localhost:5005/snapshot/kuh?width=640 -o ku
 `Accept-Language` → `DEFAULT_LANG`. Формат `/rooms` остаётся `{code: name}`;
 `/rooms/<code>` дополнительно содержит `names` со всеми переводами.
 
+Поскольку по умолчанию язык `en`, существующим русскоязычным клиентам (например FLAI)
+нужно отправлять `Accept-Language: ru` или `?lang=ru`, чтобы и дальше получать русские
+подписи.
+
 ## Мониторинг
 
 ```bash

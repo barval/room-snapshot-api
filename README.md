@@ -141,6 +141,9 @@ and integrations. Only the **label** is translated. Language resolution order:
 `?lang=` → `Accept-Language` header → `DEFAULT_LANG`. `/rooms` keeps returning
 `{code: name}`; `/rooms/<code>` additionally includes `names` with every translation.
 
+Because the default is `en`, existing Russian-language clients (for example FLAI) must
+send `Accept-Language: ru` or `?lang=ru` to keep receiving Russian labels.
+
 ## Monitoring
 
 ```bash

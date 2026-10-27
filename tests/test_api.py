@@ -1,6 +1,8 @@
 """Tests for the Flask REST API."""
 
 import importlib
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -179,3 +181,46 @@ def test_parse_width():
         parse_width("0")
     with pytest.raises(ValueError):
         parse_width("99999")
+
+
+def test_health_survives_camera_with_bad_stream(monkeypatch):
+    bad = {
+        "bad": Camera(
+            code="bad",
+            ip="10.0.0.6",
+            stream="notaport",
+            name="Bad",
+            url="rtsp://10.0.0.6:notaport",
+        )
+    }
+    monkeypatch.setattr(app_mod, "check_ffmpeg", lambda: True)
+    monkeypatch.setattr(app_mod, "probe_camera", lambda *a, **k: True)
+    application = create_app(TestConfig, cameras=bad, cache=SnapshotCache(5))
+    application.testing = True
+    response = application.test_client().get("/health", headers=KEY)
+    assert response.status_code == 200
+    assert response.get_json()["cameras"]["bad"]["reachable"] is False
+
+
+def test_snapshot_requests_to_different_cameras_run_concurrently(monkeypatch):
+    cameras = {
+        "a": Camera(code="a", ip="10.0.0.1", stream="554/s1", name="A", url="rtsp://10.0.0.1:554/s1"),
+        "b": Camera(code="b", ip="10.0.0.2", stream="554/s1", name="B", url="rtsp://10.0.0.2:554/s1"),
+    }
+    barrier = threading.Barrier(2, timeout=5)
+
+    def capture(*args, **kwargs):
+        barrier.wait()  # only released when both requests are in flight together
+        return b"jpeg"
+
+    monkeypatch.setattr(app_mod, "check_ffmpeg", lambda: True)
+    monkeypatch.setattr(app_mod, "capture_snapshot", capture)
+    application = create_app(TestConfig, cameras=cameras, cache=SnapshotCache(9999))
+    application.testing = True
+
+    def hit(code):
+        return application.test_client().get(f"/snapshot/{code}", headers=KEY).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(hit, ["a", "b"]))
+    assert results == [200, 200]

@@ -105,7 +105,10 @@ def health() -> dict:
 
     def probe(code: str) -> tuple[str, dict]:
         camera = cameras[code]
-        reachable = probe_camera(camera.ip, stream_port(camera.stream), 1.0)
+        try:
+            reachable = probe_camera(camera.ip, stream_port(camera.stream), 1.0)
+        except ValueError:
+            reachable = False
         return code, {"reachable": reachable}
 
     if cameras:

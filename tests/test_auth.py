@@ -62,3 +62,29 @@ def test_guard_allows_request_with_key():
 def test_guard_allows_bearer_token():
     client = _guarded_app("secret").test_client()
     assert client.get("/rooms", headers={"Authorization": "Bearer secret"}).status_code == 200
+
+
+def test_guard_allows_cors_preflight():
+    client = _guarded_app("secret").test_client()
+    response = client.options(
+        "/rooms",
+        headers={"Origin": "http://example.com", "Access-Control-Request-Method": "GET"},
+    )
+    assert response.status_code != 401
+
+
+def test_is_authorized_handles_non_ascii_keys():
+    assert is_authorized("café", "secret") is False
+    assert is_authorized("ключ", "ключ") is True
+
+
+def test_guard_allows_all_in_debug_without_key():
+    app = Flask(__name__)
+    app.config["DEBUG"] = True
+    install_api_key_guard(app, "")
+
+    @app.route("/rooms")
+    def rooms():
+        return "ok"
+
+    assert app.test_client().get("/rooms").status_code == 200
