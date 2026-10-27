@@ -1,2 +1,9 @@
-# Переменные
+# Environment
 .env
+
+# Python
+__pycache__/
+*.pyc
+
+# Internal specs and plans (never committed)
+docs/superpowers/
