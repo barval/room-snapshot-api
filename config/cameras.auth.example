@@ -1,0 +1,6 @@
+# Room Snapshot API — per-camera credentials template.
+# Copy to cameras.auth and edit. The real file is not tracked by git.
+# Format: code=user:password
+# Cameras without a record fall back to the global RTSP_AUTH value.
+kuh=admin:password
+gos=admin:password
