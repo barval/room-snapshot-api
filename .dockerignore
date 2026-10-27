@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+.env.*
+config/cameras.conf
+config/cameras.auth
+config/rooms.i18n.json
+__pycache__
+*.pyc
+tests
+docs
+*.md
