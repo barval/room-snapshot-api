@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import base64
 import logging
-from concurrent.futures import ThreadPoolExecutor
 
 from mcp.server import MCPServer
 from mcp.types import ImageContent
 
 from .auth import extract_api_key, is_authorized
 from .cache import SnapshotCache
-from .capture import capture_snapshot, probe_camera, stream_port
+from .capture import capture_snapshot, check_ffmpeg
 from .config import Camera, Config
+from .health import camera_state, overall_status
 from .i18n import resolve_lang, room_name, room_names, supported_languages
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 _cameras: dict[str, Camera] | None = None
 _i18n: dict[str, dict[str, str]] | None = None
 _cache: SnapshotCache | None = None
+_ffmpeg: bool | None = None
 
 
 def configure(
@@ -28,7 +29,8 @@ def configure(
     cache: SnapshotCache | None = None,
 ) -> None:
     """Override server state (used by tests)."""
-    global _cameras, _i18n, _cache
+    global _cameras, _i18n, _cache, _ffmpeg
+    _ffmpeg = None
     if cameras is not None:
         _cameras = cameras
     if i18n is not None:
@@ -51,6 +53,13 @@ def _state() -> tuple[dict[str, Camera], dict[str, dict[str, str]], SnapshotCach
 def _resolve(lang: str | None, i18n: dict[str, dict[str, str]]) -> str:
     supported = supported_languages(i18n, Config.DEFAULT_LANG)
     return resolve_lang(lang, None, Config.DEFAULT_LANG, supported)
+
+
+def _ffmpeg_available() -> bool:
+    global _ffmpeg
+    if _ffmpeg is None:
+        _ffmpeg = check_ffmpeg()
+    return _ffmpeg
 
 
 def list_rooms(lang: str | None = None) -> dict[str, str]:
@@ -102,29 +111,13 @@ def room_info(room: str, lang: str | None = None) -> dict | None:
 def health() -> dict:
     """Report camera reachability and ffmpeg availability."""
     cameras, _, _ = _state()
-
-    def probe(code: str) -> tuple[str, dict]:
-        camera = cameras[code]
-        try:
-            reachable = probe_camera(camera.ip, stream_port(camera.stream), 1.0)
-        except ValueError:
-            reachable = False
-        return code, {"reachable": reachable}
-
-    if cameras:
-        with ThreadPoolExecutor(max_workers=min(8, len(cameras))) as pool:
-            state = dict(pool.map(probe, list(cameras)))
-    else:
-        state = {}
-
-    reachable = [value["reachable"] for value in state.values()]
-    if not reachable or all(reachable):
-        status = "healthy"
-    elif any(reachable):
-        status = "degraded"
-    else:
-        status = "unhealthy"
-    return {"status": status, "cameras_loaded": len(cameras), "cameras": state}
+    states = camera_state(cameras, 1.0)
+    return {
+        "status": overall_status(states),
+        "cameras_loaded": len(cameras),
+        "ffmpeg_available": _ffmpeg_available(),
+        "cameras": states,
+    }
 
 
 def build_server() -> MCPServer:

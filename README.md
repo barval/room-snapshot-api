@@ -75,9 +75,16 @@ in `config/` and are excluded from the Docker image (mounted as a volume).
 | `FLASK_DEBUG` | Debug mode (never in production). | `false` |
 | `SECRET_KEY` | Flask session secret. | — |
 | `HOST`, `PORT` | Bind address/port (development server). | `0.0.0.0`, `5000` |
+| `CONFIG_DIR` | Directory with the installation files. | `/app/config` |
+| `CAMERAS_CONF` | Override path to `cameras.conf`. | `<CONFIG_DIR>/cameras.conf` |
+| `CAMERAS_AUTH` | Override path to `cameras.auth`. | `<CONFIG_DIR>/cameras.auth` |
+| `ROOMS_I18N` | Override path to `rooms.i18n.json`. | `<CONFIG_DIR>/rooms.i18n.json` |
 
 The service **fails closed**: if `API_KEY` is empty and `FLASK_DEBUG` is not `true`,
 it refuses to start.
+
+Run the development server with `python -m app.app` (uses `HOST`/`PORT`); under Docker
+the port is fixed by the gunicorn command.
 
 ## Authentication
 

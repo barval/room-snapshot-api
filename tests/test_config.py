@@ -122,3 +122,19 @@ def test_load_cameras_skips_non_numeric_port(tmp_path, monkeypatch):
     conf = _write(tmp_path / "cameras.conf", "kuh=10.0.0.5:stream1:Kitchen\n")
     cameras = Config.load_cameras(conf, str(tmp_path / "missing.auth"))
     assert cameras == {}
+
+
+def test_load_cameras_name_is_optional(tmp_path, monkeypatch):
+    monkeypatch.setattr(Config, "RTSP_AUTH", "")
+    conf = _write(tmp_path / "cameras.conf", "kuh=10.0.0.5:554/s1\n")
+    cameras = Config.load_cameras(conf, str(tmp_path / "missing.auth"))
+    assert cameras["kuh"].name == "kuh"
+
+
+def test_load_cameras_uses_subclass_global_auth(tmp_path):
+    class SubConfig(Config):
+        RTSP_AUTH = "sub:x"
+
+    conf = _write(tmp_path / "cameras.conf", "kuh=10.0.0.5:554/s1:Kitchen\n")
+    cameras = SubConfig.load_cameras(conf, str(tmp_path / "missing.auth"))
+    assert cameras["kuh"].url == "rtsp://sub:x@10.0.0.5:554/s1"

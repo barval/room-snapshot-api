@@ -9,6 +9,7 @@ from app.cache import SnapshotCache
 from app.config import Camera, Config
 
 mcp_mod = importlib.import_module("app.mcp_server")
+health_mod = importlib.import_module("app.health")
 
 CAMERAS = {
     "kuh": Camera(
@@ -73,7 +74,7 @@ def test_room_info_masks_url():
 
 
 def test_health_reflects_probes(monkeypatch):
-    monkeypatch.setattr(mcp_mod, "probe_camera", lambda *a, **k: False)
+    monkeypatch.setattr(health_mod, "probe_camera", lambda *a, **k: False)
     body = mcp_mod.health()
     assert body["status"] == "unhealthy"
     assert body["cameras"]["kuh"]["reachable"] is False
@@ -130,3 +131,15 @@ def test_create_asgi_app_requires_key(monkeypatch):
     monkeypatch.setattr(Config, "API_KEY", "")
     with pytest.raises(RuntimeError):
         mcp_mod.create_asgi_app()
+
+
+def test_health_includes_ffmpeg_available(monkeypatch):
+    monkeypatch.setattr(health_mod, "probe_camera", lambda *a, **k: True)
+    monkeypatch.setattr(mcp_mod, "check_ffmpeg", lambda: True)
+    body = mcp_mod.health()
+    assert body["ffmpeg_available"] is True
+
+
+def test_health_unhealthy_with_zero_cameras():
+    mcp_mod.configure(cameras={}, i18n={}, cache=SnapshotCache(5))
+    assert mcp_mod.health()["status"] == "unhealthy"

@@ -11,6 +11,7 @@ from app.cache import SnapshotCache
 from app.config import Camera, Config
 
 app_mod = importlib.import_module("app.app")
+health_mod = importlib.import_module("app.health")
 
 CAMERAS = {
     "kuh": Camera(
@@ -49,7 +50,7 @@ def make_client(monkeypatch, capture=None, probe=None):
     if capture is not None:
         monkeypatch.setattr(app_mod, "capture_snapshot", capture)
     if probe is not None:
-        monkeypatch.setattr(app_mod, "probe_camera", probe)
+        monkeypatch.setattr(health_mod, "probe_camera", probe)
     application = create_app(TestConfig, cameras=dict(CAMERAS), cache=SnapshotCache(9999))
     application.testing = True
     return application.test_client()
@@ -194,7 +195,7 @@ def test_health_survives_camera_with_bad_stream(monkeypatch):
         )
     }
     monkeypatch.setattr(app_mod, "check_ffmpeg", lambda: True)
-    monkeypatch.setattr(app_mod, "probe_camera", lambda *a, **k: True)
+    monkeypatch.setattr(health_mod, "probe_camera", lambda *a, **k: True)
     application = create_app(TestConfig, cameras=bad, cache=SnapshotCache(5))
     application.testing = True
     response = application.test_client().get("/health", headers=KEY)
@@ -224,3 +225,33 @@ def test_snapshot_requests_to_different_cameras_run_concurrently(monkeypatch):
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(hit, ["a", "b"]))
     assert results == [200, 200]
+
+
+def test_info_includes_mcp(monkeypatch):
+    client = make_client(monkeypatch)
+    body = client.get("/info", headers=KEY).get_json()
+    assert body["mcp"]["transport"] == "streamable-http"
+    assert "get_snapshot" in body["mcp"]["tools"]
+
+
+def test_if_none_match_star_returns_304(monkeypatch):
+    client = make_client(monkeypatch, capture=lambda *a, **k: b"jpeg")
+    response = client.get("/snapshot/kuh", headers={**KEY, "If-None-Match": "*"})
+    assert response.status_code == 304
+
+
+def test_304_response_includes_cache_control(monkeypatch):
+    client = make_client(monkeypatch, capture=lambda *a, **k: b"jpeg")
+    etag = client.get("/snapshot/kuh", headers=KEY).headers["ETag"]
+    response = client.get("/snapshot/kuh", headers={**KEY, "If-None-Match": etag})
+    assert response.status_code == 304
+    assert "Cache-Control" in response.headers
+
+
+def test_health_unhealthy_with_zero_cameras(monkeypatch):
+    monkeypatch.setattr(app_mod, "check_ffmpeg", lambda: True)
+    application = create_app(TestConfig, cameras={}, cache=SnapshotCache(5))
+    application.testing = True
+    body = application.test_client().get("/health", headers=KEY).get_json()
+    assert body["status"] == "unhealthy"
+    assert body["cameras_loaded"] == 0

@@ -10,7 +10,7 @@ from app.i18n import (
 )
 
 CAMERAS = {
-    "kuh": Camera(code="kuh", ip="1.1.1.1", stream="554/s1", name="Kitchen", url="rtsp://1.1.1.1:554/s1")
+    "kuh": Camera(code="kuh", ip="10.0.0.7", stream="554/s1", name="Kitchen", url="rtsp://10.0.0.7:554/s1")
 }
 I18N = {"kuh": {"ru": "Кухня", "en": "Kitchen"}}
 

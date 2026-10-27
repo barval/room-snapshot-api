@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 from flask import Flask, Response, abort, jsonify, request
 from flask_cors import CORS
@@ -12,8 +11,9 @@ from flask_talisman import Talisman
 
 from .auth import install_api_key_guard
 from .cache import SnapshotCache, make_etag
-from .capture import capture_snapshot, check_ffmpeg, probe_camera, stream_port
+from .capture import capture_snapshot, check_ffmpeg
 from .config import Camera, Config
+from .health import camera_state, overall_status
 from .i18n import resolve_lang, room_name, room_names, supported_languages
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,16 @@ def parse_width(raw: str | None) -> int | None:
     if not 1 <= value <= 8000:
         raise ValueError("width must be between 1 and 8000")
     return value
+
+
+def _etag_matches(header: str, etag: str) -> bool:
+    """Return True if an ``If-None-Match`` header matches ``etag`` (``*`` matches all)."""
+    header = header.strip()
+    if not header:
+        return False
+    if header == "*":
+        return True
+    return etag in [candidate.strip() for candidate in header.split(",")]
 
 
 def create_app(
@@ -88,12 +98,12 @@ def create_app(
             app_cache.set(key, data)
 
         etag = make_etag(data)
-        if_none_match = request.headers.get("If-None-Match", "")
-        if if_none_match and etag in if_none_match:
-            return Response(status=304, headers={"ETag": etag})
+        cache_control = f"public, max-age={int(config_obj.SNAPSHOT_CACHE_TTL)}"
+        if _etag_matches(request.headers.get("If-None-Match", ""), etag):
+            return Response(status=304, headers={"ETag": etag, "Cache-Control": cache_control})
         response = Response(data, mimetype="image/jpeg")
         response.headers["ETag"] = etag
-        response.headers["Cache-Control"] = f"public, max-age={int(config_obj.SNAPSHOT_CACHE_TTL)}"
+        response.headers["Cache-Control"] = cache_control
         return response
 
     @app.route("/rooms", methods=["GET"])
@@ -121,31 +131,10 @@ def create_app(
 
     @app.route("/health", methods=["GET"])
     def health_check():
-        def probe(code: str) -> tuple[str, dict]:
-            camera = app_cameras[code]
-            try:
-                reachable = probe_camera(camera.ip, stream_port(camera.stream), 1.0)
-            except ValueError:
-                reachable = False
-            return code, {"reachable": reachable}
-
-        if app_cameras:
-            with ThreadPoolExecutor(max_workers=min(8, len(app_cameras))) as pool:
-                cameras_state = dict(pool.map(probe, list(app_cameras)))
-        else:
-            cameras_state = {}
-
-        reachable = [state["reachable"] for state in cameras_state.values()]
-        if not reachable or all(reachable):
-            status = "healthy"
-        elif any(reachable):
-            status = "degraded"
-        else:
-            status = "unhealthy"
-
+        cameras_state = camera_state(app_cameras, 1.0)
         return jsonify(
             {
-                "status": status,
+                "status": overall_status(cameras_state),
                 "timestamp": time.time(),
                 "cameras_loaded": len(app_cameras),
                 "ffmpeg_available": ffmpeg_available,
@@ -175,6 +164,12 @@ def create_app(
                     },
                     "health": {"method": "GET", "path": "/health", "description": "Health check"},
                     "info": {"method": "GET", "path": "/info", "description": "API information"},
+                },
+                "mcp": {
+                    "transport": "streamable-http",
+                    "path": "/mcp",
+                    "port": config_obj.MCP_PORT,
+                    "tools": ["list_rooms", "get_snapshot", "room_info", "health"],
                 },
             }
         )
@@ -208,3 +203,7 @@ def create_app(
 
 
 app = create_app()
+
+
+if __name__ == "__main__":
+    app.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG)

@@ -111,19 +111,19 @@ class Config:
             logger.error("Error reading %s: %s", auth_path, exc)
         return credentials
 
-    @staticmethod
+    @classmethod
     def load_cameras(
-        cameras_path: str | None = None, auth_path: str | None = None
+        cls, cameras_path: str | None = None, auth_path: str | None = None
     ) -> dict[str, Camera]:
-        """Load cameras from ``cameras.conf`` (``code=ip:port/path:name``)."""
+        """Load cameras from ``cameras.conf`` (``code=ip:port/path[:name]``)."""
         conf_path = cameras_path or resolve_config_path("CAMERAS_CONF", "cameras.conf")
         cameras: dict[str, Camera] = {}
         if not os.path.exists(conf_path):
             logger.warning("Camera config %s not found", conf_path)
             return cameras
 
-        auth_map = Config.load_camera_auth(auth_path)
-        global_auth = getattr(Config, "RTSP_AUTH", "") or ""
+        auth_map = cls.load_camera_auth(auth_path)
+        global_auth = getattr(cls, "RTSP_AUTH", "") or ""
 
         try:
             with open(conf_path, encoding="utf-8") as handle:
@@ -131,25 +131,24 @@ class Config:
                     line = raw.strip()
                     if not line or line.startswith("#"):
                         continue
-                    try:
-                        code, params = line.split("=", 1)
-                        ip, stream, name = params.split(":", 2)
-                    except ValueError:
-                        logger.warning("cameras.conf line %d: invalid format: %s", line_num, line)
+                    if "=" not in line:
+                        logger.warning("cameras.conf line %d: missing '='", line_num)
                         continue
+                    code, params = line.split("=", 1)
                     code = code.strip().lower()
-                    ip = ip.strip()
-                    stream = stream.strip()
-                    name = name.strip()
+                    ip, sep, remainder = params.strip().partition(":")
+                    if not sep:
+                        logger.warning("cameras.conf line %d: expected ip:stream[:name]", line_num)
+                        continue
+                    stream, _, name = remainder.partition(":")
+                    ip, stream, name = ip.strip(), stream.strip(), name.strip()
                     if not code or not ip or not stream:
-                        logger.warning("cameras.conf line %d: missing required fields", line_num)
+                        logger.warning("cameras.conf line %d: missing ip or stream", line_num)
                         continue
                     port, _, _path = stream.partition("/")
                     if not port.isdigit():
                         logger.warning(
-                            "cameras.conf line %d: stream %r does not start with a numeric port",
-                            line_num,
-                            stream,
+                            "cameras.conf line %d: stream %r has no numeric port", line_num, stream
                         )
                         continue
                     auth = auth_map.get(code) or global_auth

@@ -75,9 +75,16 @@ REST API доступен по адресу `http://localhost:5005`, MCP-сер�
 | `FLASK_DEBUG` | Режим отладки (никогда в проде). | `false` |
 | `SECRET_KEY` | Секрет сессий Flask. | — |
 | `HOST`, `PORT` | Адрес/порт (dev-сервер). | `0.0.0.0`, `5000` |
+| `CONFIG_DIR` | Каталог с инсталляционными файлами. | `/app/config` |
+| `CAMERAS_CONF` | Переопределить путь к `cameras.conf`. | `<CONFIG_DIR>/cameras.conf` |
+| `CAMERAS_AUTH` | Переопределить путь к `cameras.auth`. | `<CONFIG_DIR>/cameras.auth` |
+| `ROOMS_I18N` | Переопределить путь к `rooms.i18n.json`. | `<CONFIG_DIR>/rooms.i18n.json` |
 
 Сервис работает **fail-closed**: если `API_KEY` пуст и `FLASK_DEBUG` не `true`,
 он отказывается стартовать.
+
+Dev-сервер запускается командой `python -m app.app` (использует `HOST`/`PORT`); в Docker
+порт задаётся командой gunicorn.
 
 ## Аутентификация
 
