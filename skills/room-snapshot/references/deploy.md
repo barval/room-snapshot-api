@@ -21,8 +21,8 @@ cd room-snapshot-api
 `install.sh` is idempotent. It:
 
 1. checks docker, the compose plugin and curl;
-2. creates `.env` from `.env.example` and fills `API_KEY` and `SECRET_KEY` with
-   random values (an existing `.env` is kept as is);
+2. creates `.env` from `.env.example` and fills `API_KEY` with a random value
+   (an existing `.env` is kept as is);
 3. copies `config/*.example` to the real config files without overwriting;
 4. runs `docker compose up -d --build`;
 5. waits up to 90 seconds for `GET /health` and prints the URLs.

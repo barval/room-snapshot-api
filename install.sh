@@ -39,10 +39,7 @@ created_env=0
 if [ ! -f .env ]; then
     [ -f .env.example ] || fail ".env.example is missing"
     api_key=$(random_hex)
-    secret_key=$(random_hex)
-    sed -e "s|^API_KEY=.*|API_KEY=\"$api_key\"|" \
-        -e "s|^SECRET_KEY=.*|SECRET_KEY=\"$secret_key\"|" \
-        .env.example > .env
+    sed -e "s|^API_KEY=.*|API_KEY=\"$api_key\"|" .env.example > .env
     chmod 600 .env
     created_env=1
     printf 'created .env with a generated API key\n'

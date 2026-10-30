@@ -101,6 +101,7 @@ All errors are JSON:
 | 400 | Bad request (invalid `width`) |
 | 401 | Missing or wrong API key |
 | 404 | Unknown room code |
+| 429 | Per-client rate limit exceeded (`RATE_LIMIT_PER_MINUTE`) |
 | 500 | Internal error |
 | 502 | Capture failed |
 

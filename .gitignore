@@ -13,3 +13,6 @@ config/rooms.i18n.json
 
 # Internal specs and plans (never committed)
 docs/superpowers/
+
+# Marketplace listing drafts stay local
+docs/listing/

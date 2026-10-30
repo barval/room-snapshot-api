@@ -16,13 +16,22 @@ All notable changes to this project are documented here. The format follows
   remote HTTP support, such as Claude Desktop.
 - `.env.example` entries for `CONFIG_DIR`, `CAMERAS_CONF`, `CAMERAS_AUTH` and
   `ROOMS_I18N`.
+- `MAX_CONCURRENT_CAPTURES` (default 4): a semaphore around ffmpeg so parallel
+  requests cannot spawn an unbounded number of processes.
+- Optional `RATE_LIMIT_PER_MINUTE` (default 0, disabled) applied per client
+  address on both REST and MCP; exceeded requests get `429` with `Retry-After`.
+- IPv6 camera addresses using bracket syntax, e.g. `hall=[2001:db8::1]:554/stream1:Hall`.
 - Documentation: tested hardware (TP-Link Tapo C100, C200, C500), Claude Code and
   Cursor registration examples, this changelog.
+- Tests that validate the bundled skill's frontmatter, references and scripts.
 
 ### Changed
 
 - `GET /snapshot/<code>` sets `Cache-Control: private` (was `public`) because
   every response requires an API key and must not be stored by shared proxies.
+- `/rooms` and `/rooms/<code>` send `Vary: Accept-Language`.
+- `Accept-Language` entries with `q=0` are ignored instead of being treated as a
+  valid preference.
 - MCP tools raise a readable tool error for an unknown room, a failed capture or
   an invalid `width` instead of returning `null`.
 - The unused `lang` parameter was removed from the MCP `get_snapshot` tool; it
@@ -31,6 +40,12 @@ All notable changes to this project are documented here. The format follows
   so `API_KEY` is not needed for the stdio transport.
 - The MCP middleware decodes header bytes as latin-1, so a malformed header gets a
   `401` instead of an internal error.
+- Both compose services share one image tag (`IMAGE_TAG`, default `latest`), and
+  the `mcp` service now has a healthcheck.
+
+### Removed
+
+- `SECRET_KEY`: it had an insecure default and Flask sessions were never used.
 
 ### Fixed
 

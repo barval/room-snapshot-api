@@ -261,3 +261,24 @@ def test_health_unhealthy_with_zero_cameras(monkeypatch):
     body = application.test_client().get("/health", headers=KEY).get_json()
     assert body["status"] == "unhealthy"
     assert body["cameras_loaded"] == 0
+
+
+def test_rooms_sets_vary_accept_language(monkeypatch):
+    client = make_client(monkeypatch)
+    response = client.get("/rooms", headers=KEY)
+    assert "Accept-Language" in response.headers["Vary"]
+
+
+def test_rate_limit_returns_429(monkeypatch):
+    class LimitedConfig(TestConfig):
+        RATE_LIMIT_PER_MINUTE = 2
+
+    monkeypatch.setattr(app_mod, "check_ffmpeg", lambda: True)
+    application = create_app(LimitedConfig, cameras=dict(CAMERAS), cache=SnapshotCache(9999))
+    application.testing = True
+    client = application.test_client()
+    assert client.get("/rooms", headers=KEY).status_code == 200
+    assert client.get("/rooms", headers=KEY).status_code == 200
+    response = client.get("/rooms", headers=KEY)
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"

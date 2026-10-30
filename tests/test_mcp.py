@@ -171,6 +171,16 @@ def test_health_includes_ffmpeg_available(monkeypatch):
     assert body["ffmpeg_available"] is True
 
 
+def test_middleware_rate_limits_per_client():
+    from app.ratelimit import RateLimiter
+
+    app = _DummyApp()
+    middleware = mcp_mod.ApiKeyMiddleware(app, "secret", RateLimiter(1))
+    scope = {"type": "http", "headers": [(b"x-api-key", b"secret")], "client": ("1.2.3.4", 123)}
+    assert _run(_invoke(middleware, scope))[0]["status"] == 200
+    assert _run(_invoke(middleware, scope))[0]["status"] == 429
+
+
 def test_health_unhealthy_with_zero_cameras():
     mcp_mod.configure(cameras={}, i18n={}, cache=SnapshotCache(5))
     assert mcp_mod.health()["status"] == "unhealthy"

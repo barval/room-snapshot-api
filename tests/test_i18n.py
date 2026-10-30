@@ -74,3 +74,7 @@ def test_room_names_default_only_without_translations():
 def test_supported_languages_default_first():
     assert supported_languages(I18N, "en") == ["en", "ru"]
     assert supported_languages(I18N, "ru") == ["ru", "en"]
+
+
+def test_parse_accept_language_ignores_q_zero():
+    assert parse_accept_language("ru;q=0, en;q=0.5") == ["en"]

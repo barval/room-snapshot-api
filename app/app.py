@@ -15,6 +15,7 @@ from .capture import capture_snapshot, check_ffmpeg
 from .config import Camera, Config
 from .health import camera_state, overall_status
 from .i18n import resolve_lang, room_name, room_names, supported_languages
+from .ratelimit import RateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,24 @@ def create_app(
         frame_options="DENY",
     )
     install_api_key_guard(app, config_obj.API_KEY)
+
+    limiter = RateLimiter(getattr(config_obj, "RATE_LIMIT_PER_MINUTE", 0))
+
+    @app.before_request
+    def _enforce_rate_limit():
+        if limiter.allow(request.remote_addr or "unknown"):
+            return None
+        return (
+            jsonify({"error": "Too many requests"}),
+            429,
+            {"Retry-After": "60"},
+        )
+
+    @app.after_request
+    def _vary_accept_language(response):
+        if request.path.startswith("/rooms"):
+            response.headers.add("Vary", "Accept-Language")
+        return response
 
     app_cameras = cameras if cameras is not None else config_obj.load_cameras()
     app_i18n = config_obj.load_i18n()

@@ -14,7 +14,7 @@ gos=192.168.1.102:554/stream1:Living room
 | Field | Rules |
 |-------|-------|
 | `code` | Unique, lowercase, stable. Used in URLs and ACLs. Latin letters, digits, `_`, `-`. |
-| `ip` | Camera address reachable from the container. |
+| `ip` | Camera address reachable from the container; IPv6 in brackets, e.g. `[2001:db8::1]`. |
 | `port` | RTSP port, almost always `554`. Must be numeric. |
 | `path` | Vendor-specific stream path, e.g. `stream1` or `Streaming/Channels/101`. |
 | `name` | Default label, used when `rooms.i18n.json` has no translation. Optional; falls back to the code. |
@@ -71,6 +71,8 @@ See `.env.example` for every variable and its default. The important ones:
 | `DEFAULT_LANG` | `en` or `ru`; the default label language. |
 | `SNAPSHOT_CACHE_TTL` | Seconds a captured frame is reused. |
 | `SNAPSHOT_TIMEOUT` | ffmpeg capture timeout in seconds. |
+| `MAX_CONCURRENT_CAPTURES` | Maximum ffmpeg processes at once (default 4). |
+| `RATE_LIMIT_PER_MINUTE` | Optional per-client limit; `0` disables it. |
 | `CORS_ORIGINS` | Comma-separated origins for browser clients; empty disables cross-origin. |
 | `MCP_PORT` | MCP listen port inside the container. |
 

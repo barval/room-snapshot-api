@@ -7,8 +7,13 @@ import os
 import socket
 import subprocess
 import tempfile
+import threading
+
+from .config import Config
 
 logger = logging.getLogger(__name__)
+
+_semaphore = threading.BoundedSemaphore(max(1, Config.MAX_CONCURRENT_CAPTURES))
 
 
 def check_ffmpeg() -> bool:
@@ -57,7 +62,8 @@ def capture_snapshot(url: str, timeout: int = 15, width: int | None = None) -> b
     command.append(path)
 
     try:
-        subprocess.run(command, check=True, capture_output=True, timeout=timeout)
+        with _semaphore:
+            subprocess.run(command, check=True, capture_output=True, timeout=timeout)
         with open(path, "rb") as handle:
             data = handle.read()
         if data:

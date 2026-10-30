@@ -16,6 +16,7 @@ from .capture import capture_snapshot, check_ffmpeg
 from .config import Camera, Config
 from .health import camera_state, overall_status
 from .i18n import resolve_lang, room_name, room_names, supported_languages
+from .ratelimit import RateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +142,10 @@ def build_server() -> MCPServer:
 class ApiKeyMiddleware:
     """ASGI middleware enforcing the shared API key on MCP HTTP requests."""
 
-    def __init__(self, app, api_key: str) -> None:
+    def __init__(self, app, api_key: str, limiter: RateLimiter | None = None) -> None:
         self.app = app
         self.api_key = api_key
+        self.limiter = limiter or RateLimiter(0)
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
@@ -154,20 +156,27 @@ class ApiKeyMiddleware:
             for key, value in scope.get("headers", [])
         }
         if not is_authorized(extract_api_key(headers), self.api_key):
-            body = b'{"error": "Unauthorized"}'
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 401,
-                    "headers": [
-                        (b"content-type", b"application/json"),
-                        (b"content-length", str(len(body)).encode()),
-                    ],
-                }
-            )
-            await send({"type": "http.response.body", "body": body})
+            await self._reject(send, 401, b'{"error": "Unauthorized"}')
+            return
+        client = scope.get("client") or ("unknown", 0)
+        if not self.limiter.allow(str(client[0])):
+            await self._reject(send, 429, b'{"error": "Too many requests"}')
             return
         await self.app(scope, receive, send)
+
+    @staticmethod
+    async def _reject(send, status: int, body: bytes) -> None:
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
 
 
 def create_asgi_app():
@@ -175,7 +184,11 @@ def create_asgi_app():
     if not Config.API_KEY:
         raise RuntimeError("API_KEY is required to run the MCP server")
     server = build_server()
-    return ApiKeyMiddleware(server.streamable_http_app(host="0.0.0.0"), Config.API_KEY)
+    return ApiKeyMiddleware(
+        server.streamable_http_app(host="0.0.0.0"),
+        Config.API_KEY,
+        RateLimiter(Config.RATE_LIMIT_PER_MINUTE),
+    )
 
 
 def main() -> None:

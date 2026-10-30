@@ -116,9 +116,10 @@ in `config/` and are excluded from the Docker image (mounted as a volume).
 | `DEFAULT_LANG` | Default room-name language (`en` or `ru`). | `en` |
 | `SNAPSHOT_CACHE_TTL` | Snapshot cache lifetime, seconds. | `5` |
 | `SNAPSHOT_TIMEOUT` | ffmpeg capture timeout, seconds. | `15` |
+| `MAX_CONCURRENT_CAPTURES` | Maximum ffmpeg processes at once. | `4` |
+| `RATE_LIMIT_PER_MINUTE` | Per-client request limit; `0` disables it. | `0` |
 | `MCP_PORT` | MCP server port. | `8000` |
 | `FLASK_DEBUG` | Debug mode (never in production). | `false` |
-| `SECRET_KEY` | Flask session secret. | — |
 | `HOST`, `PORT` | Bind address/port (development server). | `0.0.0.0`, `5000` |
 | `CONFIG_DIR` | Directory with the installation files. | `/app/config` |
 | `CAMERAS_CONF` | Override path to `cameras.conf`. | `<CONFIG_DIR>/cameras.conf` |
@@ -259,6 +260,9 @@ CI runs `ruff` and `pytest` on every push (`.gitea/workflows/ci.yml`).
 
 - Credentials live in `config/cameras.auth` and `.env`, never in git or the image.
 - Every endpoint requires the API key; the service will not start without one.
+- Captures are capped by `MAX_CONCURRENT_CAPTURES` so one client cannot spawn an
+  unbounded number of ffmpeg processes; set `RATE_LIMIT_PER_MINUTE` for a hard
+  per-client request limit.
 - Requests to different cameras run in parallel; one slow stream does not block the rest.
 - Use HTTPS and a reverse proxy in production; camera credentials are URL-encoded and
   masked in API responses and logs.
