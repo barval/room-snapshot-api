@@ -266,6 +266,13 @@ CI runs `ruff` and `pytest` on every push (`.gitea/workflows/ci.yml`).
 - Requests to different cameras run in parallel; one slow stream does not block the rest.
 - Use HTTPS and a reverse proxy in production; camera credentials are URL-encoded and
   masked in API responses and logs.
+- **Behind a reverse proxy the rate limit counts the proxy, not the client.** With
+  `RATE_LIMIT_PER_MINUTE` enabled, every client behind the same nginx/Caddy/Traefik
+  shares one bucket: one busy client can return `429` to all of them. Either keep the
+  application limit at `0` and limit requests in the proxy (`limit_req` in nginx), or
+  enable trusted proxy headers. Do not trust `X-Forwarded-For` while ports `5005` and
+  `5006` are reachable directly — a client could spoof any address and bypass the
+  limit. The same applies to the MCP server and uvicorn's `--proxy-headers`.
 
 ## Roadmap
 

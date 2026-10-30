@@ -42,6 +42,8 @@ All notable changes to this project are documented here. The format follows
   `401` instead of an internal error.
 - Both compose services share one image tag (`IMAGE_TAG`, default `latest`), and
   the `mcp` service now has a healthcheck.
+- Documentation explains that a reverse proxy makes the rate limiter count the
+  proxy address, and how to limit in the proxy instead.
 
 ### Removed
 

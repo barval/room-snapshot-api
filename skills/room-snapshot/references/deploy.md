@@ -82,12 +82,25 @@ docker compose down          # stops and removes containers, keeps config and .e
 There is no volume to delete: removing the directory removes everything except
 what the user copied elsewhere.
 
-## Reverse proxy and HTTPS
+## Reverse proxy, HTTPS and rate limiting
 
 The service speaks plain HTTP and authenticates with a header. In production put
 it behind a TLS-terminating proxy and do not expose `5005`/`5006` directly to the
 internet. Camera credentials never leave the container: they are used only in the
 ffmpeg command line, and errors are masked before logging.
+
+If `RATE_LIMIT_PER_MINUTE` is enabled, remember that it counts the TCP peer: behind
+a proxy that is the proxy's address, so every client shares one bucket. Two sound
+options:
+
+1. keep the application limit at `0` and limit in the proxy, for example
+   `limit_req_zone $binary_remote_addr zone=snapshot:10m rate=60r/m;` plus
+   `limit_req zone=snapshot burst=10 nodelay;`
+2. enable trusted proxy headers only when direct access to the service ports is
+   blocked; otherwise a client spoofs `X-Forwarded-For` and bypasses the limit.
+
+The MCP server has the same property; uvicorn rewrites the client address only
+with `--proxy-headers` and a trusted `forwarded_allow_ips` list.
 
 ## Read-only secret handling
 

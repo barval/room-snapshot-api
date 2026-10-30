@@ -20,6 +20,7 @@ curl -i -H "X-API-Key: $KEY" http://localhost:5005/health
 | Snapshot is old | Cache TTL | Add `?fresh=1` or lower `SNAPSHOT_CACHE_TTL` |
 | First snapshot is slow | ffmpeg opens the stream and waits for a keyframe | Use `stream2`, a smaller `width`, or raise `SNAPSHOT_TIMEOUT` |
 | MCP client cannot connect | Wrong URL or missing header | URL must end in `/mcp`; add `X-API-Key` |
+| `429` for every client behind a proxy | The limit counts the proxy address | Keep the app limit at `0` and limit in the proxy, or configure trusted proxy headers |
 | MCP tool returns an error about an unknown room | Code not in `cameras.conf` | Call `list_rooms` first |
 
 ## Diagnosing a 502
