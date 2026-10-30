@@ -2,8 +2,13 @@
 
 import asyncio
 import importlib
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app.cache import SnapshotCache
 from app.config import Camera, Config
@@ -50,8 +55,25 @@ def test_get_snapshot_returns_jpeg_image(monkeypatch):
     assert content.mime_type == "image/jpeg"
 
 
-def test_get_snapshot_unknown_room_returns_none():
-    assert mcp_mod.get_snapshot("xyz") is None
+def test_get_snapshot_unknown_room_raises_tool_error():
+    with pytest.raises(ToolError, match="Unknown room"):
+        mcp_mod.get_snapshot("xyz")
+
+
+def test_get_snapshot_invalid_width_raises_tool_error():
+    with pytest.raises(ToolError, match="width"):
+        mcp_mod.get_snapshot("kuh", width=0)
+
+
+def test_get_snapshot_capture_failure_raises_tool_error(monkeypatch):
+    monkeypatch.setattr(mcp_mod, "capture_snapshot", lambda *a, **k: None)
+    with pytest.raises(ToolError, match="did not return a frame"):
+        mcp_mod.get_snapshot("kuh")
+
+
+def test_room_info_unknown_room_raises_tool_error():
+    with pytest.raises(ToolError, match="Unknown room"):
+        mcp_mod.room_info("xyz")
 
 
 def test_get_snapshot_uses_cache(monkeypatch):
@@ -127,6 +149,15 @@ def test_middleware_allows_request_with_key():
     assert messages[0]["status"] == 200
 
 
+def test_middleware_rejects_non_utf8_key():
+    app = _DummyApp()
+    middleware = mcp_mod.ApiKeyMiddleware(app, "secret")
+    scope = {"type": "http", "headers": [(b"x-api-key", b"\xff\xfe")]}
+    messages = _run(_invoke(middleware, scope))
+    assert messages[0]["status"] == 401
+    assert app.called is False
+
+
 def test_create_asgi_app_requires_key(monkeypatch):
     monkeypatch.setattr(Config, "API_KEY", "")
     with pytest.raises(RuntimeError):
@@ -143,3 +174,18 @@ def test_health_includes_ffmpeg_available(monkeypatch):
 def test_health_unhealthy_with_zero_cameras():
     mcp_mod.configure(cameras={}, i18n={}, cache=SnapshotCache(5))
     assert mcp_mod.health()["status"] == "unhealthy"
+
+
+def test_importing_mcp_module_does_not_require_api_key(tmp_path):
+    repo_root = Path(__file__).resolve().parents[1]
+    env = {key: value for key, value in os.environ.items() if key != "API_KEY"}
+    env["CONFIG_DIR"] = str(tmp_path)
+    result = subprocess.run(
+        [sys.executable, "-c", "import app.mcp_server"],
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

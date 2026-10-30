@@ -70,7 +70,7 @@ class Config:
 
     RTSP_AUTH = os.getenv("RTSP_AUTH", "")
     API_KEY = os.getenv("API_KEY", "")
-    API_VERSION = "1.3.0"
+    API_VERSION = "1.4.0"
     API_TITLE = "Room Snapshot API"
     DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
     HOST = os.getenv("HOST", "0.0.0.0")

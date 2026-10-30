@@ -98,7 +98,7 @@ def create_app(
             app_cache.set(key, data)
 
         etag = make_etag(data)
-        cache_control = f"public, max-age={int(config_obj.SNAPSHOT_CACHE_TTL)}"
+        cache_control = f"private, max-age={int(config_obj.SNAPSHOT_CACHE_TTL)}"
         if _etag_matches(request.headers.get("If-None-Match", ""), etag):
             return Response(status=304, headers={"ETag": etag, "Cache-Control": cache_control})
         response = Response(data, mimetype="image/jpeg")
@@ -160,7 +160,7 @@ def create_app(
                     "snapshot": {
                         "method": "GET",
                         "path": "/snapshot/<room>",
-                        "description": "Capture a room snapshot (params: width, fresh, lang)",
+                        "description": "Capture a room snapshot (params: width, fresh)",
                     },
                     "health": {"method": "GET", "path": "/health", "description": "Health check"},
                     "info": {"method": "GET", "path": "/info", "description": "API information"},

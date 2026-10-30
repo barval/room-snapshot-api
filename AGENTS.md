@@ -1,4 +1,4 @@
-# AGENTS.md — Room Snapshot API v1.3
+# AGENTS.md — Room Snapshot API v1.4
 
 > **Read this file first.** It holds the project's hard rules, exact commands and
 > constraints for anyone (human or agent) changing this code. The README is the
@@ -9,7 +9,8 @@
 A small service that turns RTSP surveillance cameras into a simple HTTP API **and** an
 MCP server, so other projects (scripts, sites, apps, AI agents) can use cameras without
 dealing with RTSP or credentials. Flask REST app + a separate MCP process (streamable
-HTTP), both built from the same image, sharing config, capture and cache modules.
+HTTP or stdio), both built from the same image, sharing config, capture and cache
+modules. The repository also ships an agent skill and a one-command installer.
 
 ## Commands (exact)
 
@@ -26,10 +27,12 @@ pytest -q                        # full suite (light)
 # Dev servers
 python -m app.app                # REST, uses HOST/PORT
 python -m app.mcp_server         # MCP, uses MCP_PORT (streamable HTTP at /mcp)
+python -m app.mcp_server --stdio # MCP over stdio, no API key required
 
 # Docker
+./install.sh                     # first run: config, key, build, start, health check
 docker compose config -q
-docker build -t room-snapshot-api:v1.3 .
+docker build -t room-snapshot-api:v1.4 .
 docker compose up -d             # api on :5005, mcp on :5006
 ```
 
@@ -46,8 +49,11 @@ docker compose up -d             # api on :5005, mcp on :5006
 | `app/app.py` | Flask app factory, routes, error handlers (`app:app` for gunicorn) |
 | `app/mcp_server.py` | MCP server, tools and API-key ASGI middleware |
 | `config/*.example` | Templates for installation-specific files (never real data) |
+| `skills/room-snapshot/` | Agent skill: `SKILL.md`, focused references, preflight script |
+| `install.sh` | Idempotent first-run installer (config, key, build, health check) |
 | `tests/` | pytest suite (unit + API via test client) |
 | `Dockerfile`, `docker-compose.yml` | Image (non-root) and the `api` + `mcp` services |
+| `CHANGELOG.md` | Keep a Changelog history, English |
 | `.gitea/workflows/ci.yml` | CI: `ruff` + `pytest` |
 
 ## Hard rules
@@ -70,7 +76,10 @@ docker compose up -d             # api on :5005, mcp on :5006
    → `image/jpeg`, `GET /health` → HTTP 200 (camera failures only change the `status`
    field, never the HTTP code, so the container healthcheck does not restart-loop).
 8. **The version lives in one place** — `Config.API_VERSION` in `app/config.py`;
-   update it together with the README title/badges on a release.
+   update it together with the README title/badges and `CHANGELOG.md` on a release.
+9. **The documentation states the tested hardware** — README and README-ru must say
+   that testing was performed on TP-Link Tapo C100, C200 and C500 cameras. Do not
+   claim support for other models without testing them.
 
 ## Breaking change to carry
 
@@ -84,4 +93,5 @@ which builds Russian declensions from room names) must send `Accept-Language: ru
 - Run tests **narrowly** (one file) while iterating; the full suite is light, but never
   start a second pytest run in parallel, and check free RAM before a broad run.
 - ffmpeg, sockets and camera probes are monkeypatched in tests — no network access.
-- `tests/conftest.py` sets a dummy `API_KEY` so importing the package succeeds.
+- `tests/conftest.py` sets a dummy `API_KEY`; importing a submodule no longer needs
+  one, but `app:app` (gunicorn) and the test client still do.

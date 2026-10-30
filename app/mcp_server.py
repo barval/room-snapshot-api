@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import logging
+import sys
 
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ImageContent
 
 from .auth import extract_api_key, is_authorized
@@ -69,19 +71,21 @@ def list_rooms(lang: str | None = None) -> dict[str, str]:
     return {code: room_name(code, resolved, cameras, i18n) for code in cameras}
 
 
-def get_snapshot(room: str, width: int | None = None, lang: str | None = None):
-    """Capture the current JPEG frame from a room camera. Returns image content or None."""
+def get_snapshot(room: str, width: int | None = None):
+    """Capture the current JPEG frame from a room camera and return it as image content."""
     cameras, _, cache = _state()
     code = room.lower()
     camera = cameras.get(code)
     if camera is None:
-        return None
+        raise ToolError(f"Unknown room {room!r}. Call list_rooms to see the available codes.")
+    if width is not None and not 1 <= width <= 8000:
+        raise ToolError("width must be between 1 and 8000")
     key = (code, width)
     data = cache.get(key)
     if data is None:
         data = capture_snapshot(camera.url, Config.SNAPSHOT_TIMEOUT, width)
         if not data:
-            return None
+            raise ToolError(f"Camera for room {code!r} did not return a frame. It may be offline.")
         cache.set(key, data)
     return ImageContent(
         type="image",
@@ -90,13 +94,13 @@ def get_snapshot(room: str, width: int | None = None, lang: str | None = None):
     )
 
 
-def room_info(room: str, lang: str | None = None) -> dict | None:
+def room_info(room: str, lang: str | None = None) -> dict:
     """Return details for a room (code, localized name, all names, ip, stream, masked url)."""
     cameras, i18n, _ = _state()
     code = room.lower()
     camera = cameras.get(code)
     if camera is None:
-        return None
+        raise ToolError(f"Unknown room {room!r}. Call list_rooms to see the available codes.")
     resolved = _resolve(lang, i18n)
     return {
         "code": code,
@@ -145,7 +149,10 @@ class ApiKeyMiddleware:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
-        headers = {key.decode(): value.decode() for key, value in scope.get("headers", [])}
+        headers = {
+            key.decode("latin-1"): value.decode("latin-1")
+            for key, value in scope.get("headers", [])
+        }
         if not is_authorized(extract_api_key(headers), self.api_key):
             body = b'{"error": "Unauthorized"}'
             await send(
@@ -172,6 +179,11 @@ def create_asgi_app():
 
 
 def main() -> None:
+    """Run the MCP server over streamable HTTP, or over stdio with ``--stdio``."""
+    if "--stdio" in sys.argv[1:]:
+        build_server().run("stdio")
+        return
+
     import uvicorn
 
     uvicorn.run(create_asgi_app(), host="0.0.0.0", port=Config.MCP_PORT)

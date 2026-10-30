@@ -248,6 +248,12 @@ def test_304_response_includes_cache_control(monkeypatch):
     assert "Cache-Control" in response.headers
 
 
+def test_snapshot_cache_control_is_private(monkeypatch):
+    client = make_client(monkeypatch, capture=lambda *a, **k: b"jpeg")
+    response = client.get("/snapshot/kuh", headers=KEY)
+    assert response.headers["Cache-Control"].startswith("private")
+
+
 def test_health_unhealthy_with_zero_cameras(monkeypatch):
     monkeypatch.setattr(app_mod, "check_ffmpeg", lambda: True)
     application = create_app(TestConfig, cameras={}, cache=SnapshotCache(5))
