@@ -1,25 +1,31 @@
-# Room Snapshot API v1.3
+# Room Snapshot API v1.4
 
 **English** | [Русский](README-ru.md)
 
 [![Python 3.15](https://img.shields.io/badge/python-3.15-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-ready-%230db7ed.svg)](https://www.docker.com/)
+[![MCP](https://img.shields.io/badge/MCP-streamable%20HTTP-blueviolet.svg)](https://modelcontextprotocol.io/)
 
 A small service that turns RTSP surveillance cameras into a simple HTTP API and an
 MCP server. Other projects — scripts, sites, apps and AI agents — talk to it instead
 of dealing with RTSP URLs and camera credentials.
 
+Ships with an [agent skill](skills/README.md), so Claude Code, Cursor and other
+agents can install and use it on their own.
+
 ## Features
 
 - **HTTP API** for room lists, room details and JPEG snapshots.
-- **MCP server** (streamable HTTP) so AI agents get cameras as ready-made tools.
+- **MCP server** (streamable HTTP and stdio) so AI agents get cameras as ready-made tools.
+- **Agent skill** that can deploy the service and use it from Claude Code, Cursor and other agents.
 - **Per-camera credentials** instead of one shared login.
 - **API key authentication** on every endpoint (REST and MCP).
 - **Concurrent capture**: requests to different cameras run in parallel.
 - **In-memory snapshot cache** with `ETag`/`304` and `Cache-Control`.
 - **Localized room names** (`ru`/`en`) with a per-installation translation file.
 - **Real health check**: live TCP probes of every camera.
+- **One-command installation**: `./install.sh` prepares the config and starts Docker.
 - Docker image, runs as a non-root user.
 
 ## Requirements
@@ -28,22 +34,61 @@ of dealing with RTSP URLs and camera credentials.
 - Python 3.15 and FFmpeg for local development.
 - Network access to the RTSP cameras.
 
+## Tested hardware
+
+The service is tested with **TP-Link Tapo C100, C200 and C500** IP cameras over
+RTSP. Other cameras work as long as ffmpeg can read their RTSP stream; the setup
+notes for Tapo (camera account, `/stream1` and `/stream2` paths) are in
+[`skills/room-snapshot/references/cameras.md`](skills/room-snapshot/references/cameras.md).
+
 ## Quick start
+
+One command creates `.env` with a generated API key, copies the config templates,
+builds the image and waits until the API is healthy:
 
 ```bash
 git clone git@gitea.prits.ru:barval-my/room-snapshot-api.git
 cd room-snapshot-api
+./install.sh
+```
 
+Then put your cameras into `config/cameras.conf` and restart:
+
+```bash
+docker compose restart api mcp
+```
+
+Alternatively, do it by hand:
+
+```bash
 cp .env.example .env               # set API_KEY and RTSP_AUTH
 cp config/cameras.conf.example config/cameras.conf
 cp config/cameras.auth.example config/cameras.auth     # optional per-camera credentials
 cp config/rooms.i18n.example.json config/rooms.i18n.json  # optional translations
 
-docker compose up -d
+docker compose up -d --build
 ```
 
 The REST API is available at `http://localhost:5005` and the MCP server at
 `http://localhost:5006/mcp`.
+
+## Agent skill
+
+The repository ships a self-contained skill in
+[`skills/room-snapshot/`](skills/room-snapshot/SKILL.md). It covers both cases:
+
+- **deploy** — the agent checks prerequisites, runs `./install.sh`, adds cameras,
+  verifies the endpoints and registers the MCP server;
+- **use** — the agent is given a base URL and an API key and only reads rooms,
+  takes snapshots and reports health.
+
+```bash
+mkdir -p ~/.claude/skills
+cp -r skills/room-snapshot ~/.claude/skills/
+```
+
+See [`skills/README.md`](skills/README.md) for other agents and for a smoke test.
+The skill is MIT like the rest of the project and is published free of charge.
 
 ## Installation-specific files
 
@@ -71,9 +116,10 @@ in `config/` and are excluded from the Docker image (mounted as a volume).
 | `DEFAULT_LANG` | Default room-name language (`en` or `ru`). | `en` |
 | `SNAPSHOT_CACHE_TTL` | Snapshot cache lifetime, seconds. | `5` |
 | `SNAPSHOT_TIMEOUT` | ffmpeg capture timeout, seconds. | `15` |
+| `MAX_CONCURRENT_CAPTURES` | Maximum ffmpeg processes at once. | `4` |
+| `RATE_LIMIT_PER_MINUTE` | Per-client request limit; `0` disables it. | `0` |
 | `MCP_PORT` | MCP server port. | `8000` |
 | `FLASK_DEBUG` | Debug mode (never in production). | `false` |
-| `SECRET_KEY` | Flask session secret. | — |
 | `HOST`, `PORT` | Bind address/port (development server). | `0.0.0.0`, `5000` |
 | `CONFIG_DIR` | Directory with the installation files. | `/app/config` |
 | `CAMERAS_CONF` | Override path to `cameras.conf`. | `<CONFIG_DIR>/cameras.conf` |
@@ -104,7 +150,7 @@ A missing or wrong key returns `401 {"error": "Unauthorized"}`.
 | GET | `/info` | API metadata and endpoint list. |
 | GET | `/rooms` | `{code: name}` for all rooms (language via `?lang=` / `Accept-Language`). |
 | GET | `/rooms/<code>` | Room details: `name`, `names`, `ip`, `stream`, masked `url`. |
-| GET | `/snapshot/<code>` | JPEG snapshot. Params: `width=<px>`, `fresh=1`, `lang=`. |
+| GET | `/snapshot/<code>` | JPEG snapshot. Params: `width=<px>`, `fresh=1`. |
 | GET | `/health` | Live camera reachability; always HTTP 200. |
 
 Snapshot responses carry `ETag` and `Cache-Control`; send `If-None-Match` to get
@@ -124,9 +170,12 @@ Tools exposed:
 | Tool | Arguments | Returns |
 |------|-----------|---------|
 | `list_rooms` | `lang?` | Room code → localized name. |
-| `get_snapshot` | `room`, `width?`, `lang?` | JPEG frame as image content. |
+| `get_snapshot` | `room`, `width?` | JPEG frame as image content. |
 | `room_info` | `room`, `lang?` | Room details with a masked URL. |
 | `health` | — | Camera reachability and ffmpeg availability. |
+
+Unknown rooms and capture failures are returned as tool errors with a readable
+message, so the agent can explain the problem instead of showing nothing.
 
 Example MCP client configuration (URL transport):
 
@@ -136,6 +185,32 @@ Example MCP client configuration (URL transport):
     "room-snapshot": {
       "url": "http://localhost:5006/mcp",
       "headers": { "X-API-Key": "your-api-key" }
+    }
+  }
+}
+```
+
+Claude Code:
+
+```bash
+claude mcp add --transport http room-snapshot http://localhost:5006/mcp \
+  --header "X-API-Key: your-api-key"
+```
+
+Clients without remote HTTP support can run the server locally over stdio; the
+pipe is trusted, so no API key is required:
+
+```bash
+python -m app.mcp_server --stdio
+```
+
+```json
+{
+  "mcpServers": {
+    "room-snapshot": {
+      "command": "python",
+      "args": ["-m", "app.mcp_server", "--stdio"],
+      "cwd": "/path/to/room-snapshot-api"
     }
   }
 }
@@ -164,6 +239,7 @@ The HTTP code stays 200 so a switched-off camera does not restart the container.
 ## Docker
 
 ```bash
+./install.sh               # first run: config, key, build, start, health check
 docker compose build
 docker compose up -d      # api on :5005, mcp on :5006
 docker compose down
@@ -184,9 +260,19 @@ CI runs `ruff` and `pytest` on every push (`.gitea/workflows/ci.yml`).
 
 - Credentials live in `config/cameras.auth` and `.env`, never in git or the image.
 - Every endpoint requires the API key; the service will not start without one.
+- Captures are capped by `MAX_CONCURRENT_CAPTURES` so one client cannot spawn an
+  unbounded number of ffmpeg processes; set `RATE_LIMIT_PER_MINUTE` for a hard
+  per-client request limit.
 - Requests to different cameras run in parallel; one slow stream does not block the rest.
 - Use HTTPS and a reverse proxy in production; camera credentials are URL-encoded and
   masked in API responses and logs.
+- **Behind a reverse proxy the rate limit counts the proxy, not the client.** With
+  `RATE_LIMIT_PER_MINUTE` enabled, every client behind the same nginx/Caddy/Traefik
+  shares one bucket: one busy client can return `429` to all of them. Either keep the
+  application limit at `0` and limit requests in the proxy (`limit_req` in nginx), or
+  enable trusted proxy headers. Do not trust `X-Forwarded-For` while ports `5005` and
+  `5006` are reachable directly — a client could spoof any address and bypass the
+  limit. The same applies to the MCP server and uvicorn's `--proxy-headers`.
 
 ## Roadmap
 

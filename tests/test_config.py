@@ -138,3 +138,26 @@ def test_load_cameras_uses_subclass_global_auth(tmp_path):
     conf = _write(tmp_path / "cameras.conf", "kuh=10.0.0.5:554/s1:Kitchen\n")
     cameras = SubConfig.load_cameras(conf, str(tmp_path / "missing.auth"))
     assert cameras["kuh"].url == "rtsp://sub:x@10.0.0.5:554/s1"
+
+
+def test_load_cameras_ipv6(tmp_path, monkeypatch):
+    monkeypatch.setattr(Config, "RTSP_AUTH", "")
+    conf = _write(tmp_path / "cameras.conf", "hall=[2001:db8::1]:554/stream1:Hall\n")
+    auth = _write(tmp_path / "cameras.auth", "hall=u:p\n")
+    camera = Config.load_cameras(conf, auth)["hall"]
+    assert camera.ip == "2001:db8::1"
+    assert camera.url == "rtsp://u:p@[2001:db8::1]:554/stream1"
+    assert camera.masked_url() == "rtsp://***:***@[2001:db8::1]:554/stream1"
+
+
+def test_load_cameras_ipv6_without_auth(tmp_path, monkeypatch):
+    monkeypatch.setattr(Config, "RTSP_AUTH", "")
+    conf = _write(tmp_path / "cameras.conf", "hall=[::1]:554/s1:Hall\n")
+    cameras = Config.load_cameras(conf, str(tmp_path / "missing.auth"))
+    assert cameras["hall"].url == "rtsp://[::1]:554/s1"
+
+
+def test_load_cameras_rejects_unterminated_ipv6(tmp_path, monkeypatch):
+    monkeypatch.setattr(Config, "RTSP_AUTH", "")
+    conf = _write(tmp_path / "cameras.conf", "hall=[2001:db8::1:554/s1:Hall\n")
+    assert Config.load_cameras(conf, str(tmp_path / "missing.auth")) == {}

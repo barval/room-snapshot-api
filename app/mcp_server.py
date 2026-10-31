@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import logging
+import sys
 
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ImageContent
 
 from .auth import extract_api_key, is_authorized
@@ -14,6 +16,7 @@ from .capture import capture_snapshot, check_ffmpeg
 from .config import Camera, Config
 from .health import camera_state, overall_status
 from .i18n import resolve_lang, room_name, room_names, supported_languages
+from .ratelimit import RateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -69,19 +72,21 @@ def list_rooms(lang: str | None = None) -> dict[str, str]:
     return {code: room_name(code, resolved, cameras, i18n) for code in cameras}
 
 
-def get_snapshot(room: str, width: int | None = None, lang: str | None = None):
-    """Capture the current JPEG frame from a room camera. Returns image content or None."""
+def get_snapshot(room: str, width: int | None = None):
+    """Capture the current JPEG frame from a room camera and return it as image content."""
     cameras, _, cache = _state()
     code = room.lower()
     camera = cameras.get(code)
     if camera is None:
-        return None
+        raise ToolError(f"Unknown room {room!r}. Call list_rooms to see the available codes.")
+    if width is not None and not 1 <= width <= 8000:
+        raise ToolError("width must be between 1 and 8000")
     key = (code, width)
     data = cache.get(key)
     if data is None:
         data = capture_snapshot(camera.url, Config.SNAPSHOT_TIMEOUT, width)
         if not data:
-            return None
+            raise ToolError(f"Camera for room {code!r} did not return a frame. It may be offline.")
         cache.set(key, data)
     return ImageContent(
         type="image",
@@ -90,13 +95,13 @@ def get_snapshot(room: str, width: int | None = None, lang: str | None = None):
     )
 
 
-def room_info(room: str, lang: str | None = None) -> dict | None:
+def room_info(room: str, lang: str | None = None) -> dict:
     """Return details for a room (code, localized name, all names, ip, stream, masked url)."""
     cameras, i18n, _ = _state()
     code = room.lower()
     camera = cameras.get(code)
     if camera is None:
-        return None
+        raise ToolError(f"Unknown room {room!r}. Call list_rooms to see the available codes.")
     resolved = _resolve(lang, i18n)
     return {
         "code": code,
@@ -137,30 +142,41 @@ def build_server() -> MCPServer:
 class ApiKeyMiddleware:
     """ASGI middleware enforcing the shared API key on MCP HTTP requests."""
 
-    def __init__(self, app, api_key: str) -> None:
+    def __init__(self, app, api_key: str, limiter: RateLimiter | None = None) -> None:
         self.app = app
         self.api_key = api_key
+        self.limiter = limiter or RateLimiter(0)
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
-        headers = {key.decode(): value.decode() for key, value in scope.get("headers", [])}
+        headers = {
+            key.decode("latin-1"): value.decode("latin-1")
+            for key, value in scope.get("headers", [])
+        }
         if not is_authorized(extract_api_key(headers), self.api_key):
-            body = b'{"error": "Unauthorized"}'
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 401,
-                    "headers": [
-                        (b"content-type", b"application/json"),
-                        (b"content-length", str(len(body)).encode()),
-                    ],
-                }
-            )
-            await send({"type": "http.response.body", "body": body})
+            await self._reject(send, 401, b'{"error": "Unauthorized"}')
+            return
+        client = scope.get("client") or ("unknown", 0)
+        if not self.limiter.allow(str(client[0])):
+            await self._reject(send, 429, b'{"error": "Too many requests"}')
             return
         await self.app(scope, receive, send)
+
+    @staticmethod
+    async def _reject(send, status: int, body: bytes) -> None:
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
 
 
 def create_asgi_app():
@@ -168,10 +184,19 @@ def create_asgi_app():
     if not Config.API_KEY:
         raise RuntimeError("API_KEY is required to run the MCP server")
     server = build_server()
-    return ApiKeyMiddleware(server.streamable_http_app(host="0.0.0.0"), Config.API_KEY)
+    return ApiKeyMiddleware(
+        server.streamable_http_app(host="0.0.0.0"),
+        Config.API_KEY,
+        RateLimiter(Config.RATE_LIMIT_PER_MINUTE),
+    )
 
 
 def main() -> None:
+    """Run the MCP server over streamable HTTP, or over stdio with ``--stdio``."""
+    if "--stdio" in sys.argv[1:]:
+        build_server().run("stdio")
+        return
+
     import uvicorn
 
     uvicorn.run(create_asgi_app(), host="0.0.0.0", port=Config.MCP_PORT)

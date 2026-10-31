@@ -3,6 +3,8 @@
 import os
 import socket
 import subprocess
+import threading
+import time
 
 import app.capture as capture_mod
 from app.capture import (
@@ -123,3 +125,29 @@ def test_probe_camera_false_for_closed_port():
     port = probe.getsockname()[1]
     probe.close()
     assert probe_camera("127.0.0.1", port, timeout=0.2) is False
+
+
+def test_capture_respects_concurrency_limit(monkeypatch):
+    monkeypatch.setattr(capture_mod, "_semaphore", threading.BoundedSemaphore(1))
+    state = {"active": 0, "peak": 0}
+    lock = threading.Lock()
+
+    def fake_run(*args, **kwargs):
+        command = args[0] if args else kwargs["command"]
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+        time.sleep(0.05)
+        with lock:
+            state["active"] -= 1
+        with open(command[-1], "wb") as handle:
+            handle.write(b"x")
+        return _Completed()
+
+    monkeypatch.setattr(capture_mod.subprocess, "run", fake_run)
+    threads = [threading.Thread(target=capture_snapshot, args=("rtsp://x", 5)) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert state["peak"] == 1

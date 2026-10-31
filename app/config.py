@@ -36,14 +36,15 @@ def resolve_config_path(env_var: str | None, filename: str) -> str:
 
 def build_rtsp_url(ip: str, stream: str, auth: str) -> str:
     """Build an RTSP URL, URL-encoding credentials; omit userinfo when there is none."""
+    host = f"[{ip}]" if ":" in ip else ip
     if not auth:
-        return f"rtsp://{ip}:{stream}"
+        return f"rtsp://{host}:{stream}"
     user, sep, password = auth.partition(":")
     if sep:
         userinfo = f"{quote(user, safe='')}:{quote(password, safe='')}@"
     else:
         userinfo = f"{quote(user, safe='')}@"
-    return f"rtsp://{userinfo}{ip}:{stream}"
+    return f"rtsp://{userinfo}{host}:{stream}"
 
 
 @dataclass
@@ -61,7 +62,8 @@ class Camera:
     def masked_url(self) -> str:
         """Return the URL with credentials hidden."""
         if self.username or self.password:
-            return f"rtsp://***:***@{self.ip}:{self.stream}"
+            host = f"[{self.ip}]" if ":" in self.ip else self.ip
+            return f"rtsp://***:***@{host}:{self.stream}"
         return self.url
 
 
@@ -70,18 +72,19 @@ class Config:
 
     RTSP_AUTH = os.getenv("RTSP_AUTH", "")
     API_KEY = os.getenv("API_KEY", "")
-    API_VERSION = "1.3.0"
+    API_VERSION = "1.4.0"
     API_TITLE = "Room Snapshot API"
     DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
     HOST = os.getenv("HOST", "0.0.0.0")
     PORT = int(os.getenv("PORT", "5000"))
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
     DEFAULT_LANG = os.getenv("DEFAULT_LANG", "en")
     CORS_ORIGINS = [
         origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()
     ]
     SNAPSHOT_CACHE_TTL = float(os.getenv("SNAPSHOT_CACHE_TTL", "5"))
     SNAPSHOT_TIMEOUT = int(os.getenv("SNAPSHOT_TIMEOUT", "15"))
+    MAX_CONCURRENT_CAPTURES = int(os.getenv("MAX_CONCURRENT_CAPTURES", "4"))
+    RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "0"))
     MCP_PORT = int(os.getenv("MCP_PORT", "8000"))
 
     @staticmethod
@@ -136,11 +139,30 @@ class Config:
                         continue
                     code, params = line.split("=", 1)
                     code = code.strip().lower()
-                    ip, sep, remainder = params.strip().partition(":")
-                    if not sep:
-                        logger.warning("cameras.conf line %d: expected ip:stream[:name]", line_num)
-                        continue
-                    stream, _, name = remainder.partition(":")
+                    params = params.strip()
+                    if params.startswith("["):
+                        end = params.find("]")
+                        if end == -1:
+                            logger.warning(
+                                "cameras.conf line %d: unterminated IPv6 address", line_num
+                            )
+                            continue
+                        ip = params[1:end].strip()
+                        rest = params[end + 1:]
+                        if not rest.startswith(":"):
+                            logger.warning(
+                                "cameras.conf line %d: expected ip:stream[:name]", line_num
+                            )
+                            continue
+                        stream, _, name = rest[1:].partition(":")
+                    else:
+                        ip, sep, remainder = params.partition(":")
+                        if not sep:
+                            logger.warning(
+                                "cameras.conf line %d: expected ip:stream[:name]", line_num
+                            )
+                            continue
+                        stream, _, name = remainder.partition(":")
                     ip, stream, name = ip.strip(), stream.strip(), name.strip()
                     if not code or not ip or not stream:
                         logger.warning("cameras.conf line %d: missing ip or stream", line_num)
