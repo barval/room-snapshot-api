@@ -26,7 +26,8 @@ def parse_accept_language(header: str | None) -> list[str]:
                     quality = float(param[2:])
                 except ValueError:
                     quality = 1.0
-        weighted.append((lang, quality))
+        if quality > 0:
+            weighted.append((lang, quality))
     weighted.sort(key=lambda item: item[1], reverse=True)
     ordered: list[str] = []
     for lang, _ in weighted:
